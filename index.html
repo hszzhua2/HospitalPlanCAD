@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>医院空间效能规划系统 V2.0 (L2 Matrix Support)</title>
+    <title>医院空间效能规划系统 V2.1 (Full Feature Restoration)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -337,6 +337,14 @@
         .typing-dot { width: 6px; height: 6px; background: var(--text-muted); border-radius: 50%; display: inline-block; animation: typing 1.4s infinite ease-in-out both; }
         .typing-dot:nth-child(1) { animation-delay: -0.32s; } .typing-dot:nth-child(2) { animation-delay: -0.16s; }
         @keyframes typing { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+
+        /* Report Tables */
+        .report-cell { padding: 12px 16px; border-bottom: 1px solid var(--border-color); }
+        .report-header { background: var(--input-bg); color: var(--text-muted); text-transform: uppercase; font-size: 11px; font-weight: 600; padding: 12px 16px; border-bottom: 2px solid var(--border-color); text-align: left; }
+        .status-badge { padding: 2px 8px; border-radius: 99px; font-size: 10px; font-weight: 700; display: inline-block; }
+        .status-ok { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+        .status-warn { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+        .status-bad { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
     </style>
     <script type="importmap">
         {
@@ -350,7 +358,7 @@
 <body>
 
     <nav id="main-nav">
-        <div class="nav-brand"><i class="fas fa-hospital-symbol"></i> MC-SPACE V2.0 (L2 Matrix)</div>
+        <div class="nav-brand"><i class="fas fa-hospital-symbol"></i> MC-SPACE V2.1</div>
         <div class="nav-tabs">
             <div class="nav-tab active" onclick="switchTab('3d')"><i class="fas fa-cube"></i> 3D 规划</div>
             <div class="nav-tab" onclick="switchTab('report')"><i class="fas fa-chart-pie"></i> 效能报告</div>
@@ -359,8 +367,8 @@
             <button class="btn btn-ghost" onclick="toggleTheme()" title="切换主题"><i class="fas fa-moon" id="theme-icon"></i></button>
             <div style="width:1px; background:var(--border-color); margin:0 4px;"></div>
             <button class="btn btn-ai" onclick="openAIModal()"><i class="fas fa-magic"></i> AI Architect</button>
-            <button class="btn btn-secondary" onclick="exportData()"><i class="fas fa-download"></i></button>
-            <button class="btn btn-primary" onclick="runAutoOptimize()"><i class="fas fa-random"></i> 布局优化</button>
+            <button class="btn btn-secondary" onclick="exportData()"><i class="fas fa-download"></i> 导出</button>
+            <button class="btn btn-primary" onclick="startGenerativeDesign()"><i class="fas fa-dice"></i> 生成式设计</button>
         </div>
     </nav>
 
@@ -406,7 +414,7 @@
                 <div class="w-16 text-right"><span id="slice-display" class="text-xs font-mono font-bold" style="color:var(--text-main)">ALL</span></div>
             </div>
             
-            <div id="shortcut-hint">快捷键: 按住鼠标左键拖拽体块 | Ctrl+C/V 复制粘贴 | Ctrl+Z 撤销 | Del 删除</div>
+            <div id="shortcut-hint">快捷键: 鼠标左键拖拽为空白框选，点中体块为移动(Shift锁定) | Ctrl+Z 撤销 | Del 删除</div>
 
             <div id="zoom-controls">
                 <button class="btn-zoom" onclick="zoomIn()" title="放大"><i class="fas fa-plus"></i></button>
@@ -436,6 +444,8 @@
                 <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>强关联 (5)</div>
                 <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>弱关联 (1-3)</div>
                 <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div>L2 功能点</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#cbd5e1"></div>水平走廊</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#64748b"></div>垂直交通核</div>
             </div>
             
             <!-- Left Sidebar -->
@@ -558,14 +568,41 @@
         <div id="view-report" class="view-section" style="background:var(--bg-app); overflow-y:auto; padding:40px;">
              <div class="max-w-5xl mx-auto">
                 <h2 class="text-2xl font-bold mb-6" style="color:var(--text-main)">空间效能分析报告</h2>
-                 <!-- Charts and Tables (Same as before) -->
+                 <!-- Charts and Tables -->
                  <div class="grid grid-cols-2 gap-6 mb-8">
-                     <div class="panel p-4"><div style="height:250px"><canvas id="areaChart"></canvas></div></div>
-                     <div class="panel p-4"><div style="height:230px"><canvas id="flowChart"></canvas></div></div>
+                     <div class="panel p-4">
+                         <h3 class="text-sm font-bold mb-4" style="color:var(--text-muted)">功能面积占比</h3>
+                         <div style="height:250px"><canvas id="areaChart"></canvas></div>
+                     </div>
+                     <div class="panel p-4">
+                         <h3 class="text-sm font-bold mb-4" style="color:var(--text-muted)">流线效率分析</h3>
+                         <div style="height:230px"><canvas id="flowChart"></canvas></div>
+                     </div>
                  </div>
+                 
+                 <!-- Compliance Table -->
+                 <div class="panel p-6 mb-8">
+                    <h3 class="text-lg font-bold mb-4" style="color:var(--text-main)">面积配比与国标对标分析 (GB51039)</h3>
+                    <table class="w-full text-sm text-left" style="color:var(--text-muted)">
+                        <thead>
+                            <tr>
+                                <th class="report-header">功能区域</th>
+                                <th class="report-header">设计面积 (m²)</th>
+                                <th class="report-header">设计占比</th>
+                                <th class="report-header">国标参考范围</th>
+                                <th class="report-header">合规性评价</th>
+                            </tr>
+                        </thead>
+                        <tbody id="compliance-table-body"></tbody>
+                    </table>
+                 </div>
+
                  <div class="panel p-6 mb-8">
                      <h3 class="text-lg font-bold mb-4" style="color:var(--text-main)">详细效能指标</h3>
                      <table class="w-full text-sm text-left" style="color:var(--text-muted)">
+                         <thead>
+                            <tr><th class="report-header">指标项</th><th class="report-header">当前值</th><th class="report-header">参考标准</th><th class="report-header">评价</th></tr>
+                         </thead>
                          <tbody id="report-table-body"></tbody>
                      </table>
                  </div>
@@ -583,15 +620,25 @@
         const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
 
         // --- Data & State ---
+        // GB Standards: Generic Hospital Category Estimations
+        const gbBenchmarks = {
+            'emergency': { label: '急诊部', min: 2, max: 5, color: '#ef4444' },
+            'outpatient': { label: '门诊部', min: 10, max: 15, color: '#22c55e' },
+            'inpatient': { label: '住院部', min: 35, max: 45, color: '#eab308' },
+            'medtech': { label: '医技科室', min: 15, max: 20, color: '#3b82f6' },
+            'admin': { label: '行政/保障', min: 10, max: 25, color: '#64748b' },
+            'public': { label: '公共交通', min: 20, max: 35, color: '#94a3b8' }
+        };
+
         const initialDepts = [
-            { id: 'er', name: '急诊部', color: '#ef4444', w: 40, h: 5, d: 30, x: -50, y: 2.5, z: 20, beds: 30, subNodes: [{id:'er_triage', x:0, y:0, z:10}, {id:'er_resus', x:10, y:0, z:-5}] },
-            { id: 'img', name: '医技中心', color: '#3b82f6', w: 30, h: 5, d: 25, x: 0, y: 2.5, z: 20, beds: 0, subNodes: [{id:'img_ct', x:0, y:0, z:0}] },
-            { id: 'op', name: '门诊部', color: '#22c55e', w: 60, h: 8, d: 40, x: 0, y: 4, z: 70, beds: 0, subNodes: [] },
-            { id: 'surg', name: '手术部', color: '#a855f7', w: 40, h: 6, d: 40, x: 0, y: 10, z: 0, beds: 0, subNodes: [] },
-            { id: 'icu', name: 'ICU', color: '#f97316', w: 25, h: 5, d: 20, x: -40, y: 10, z: 0, beds: 20, subNodes: [] },
-            { id: 'ward1', name: '住院A', color: '#eab308', w: 60, h: 4, d: 20, x: 0, y: 20, z: -30, beds: 50, subNodes: [] },
-            { id: 'ward2', name: '住院B', color: '#eab308', w: 60, h: 4, d: 20, x: 0, y: 24, z: -30, beds: 50, subNodes: [] },
-            { id: 'log', name: '后勤供应', color: '#64748b', w: 30, h: 6, d: 30, x: 50, y: 3, z: -20, beds: 0, subNodes: [] }
+            { id: 'er', name: '急诊部', cat:'emergency', color: '#ef4444', w: 40, h: 5, d: 30, x: -50, y: 2.5, z: 20, beds: 30, subNodes: [{id:'er_triage', x:0, y:0, z:10}, {id:'er_resus', x:10, y:0, z:-5}] },
+            { id: 'img', name: '医技中心', cat:'medtech', color: '#3b82f6', w: 30, h: 5, d: 25, x: 0, y: 2.5, z: 20, beds: 0, subNodes: [{id:'img_ct', x:0, y:0, z:0}] },
+            { id: 'op', name: '门诊部', cat:'outpatient', color: '#22c55e', w: 60, h: 8, d: 40, x: 0, y: 4, z: 70, beds: 0, subNodes: [] },
+            { id: 'surg', name: '手术部', cat:'medtech', color: '#a855f7', w: 40, h: 6, d: 40, x: 0, y: 10, z: 0, beds: 0, subNodes: [] },
+            { id: 'icu', name: 'ICU', cat:'medtech', color: '#f97316', w: 25, h: 5, d: 20, x: -40, y: 10, z: 0, beds: 20, subNodes: [] },
+            { id: 'ward1', name: '住院A', cat:'inpatient', color: '#eab308', w: 60, h: 4, d: 20, x: 0, y: 20, z: -30, beds: 50, subNodes: [] },
+            { id: 'ward2', name: '住院B', cat:'inpatient', color: '#eab308', w: 60, h: 4, d: 20, x: 0, y: 24, z: -30, beds: 50, subNodes: [] },
+            { id: 'log', name: '后勤供应', cat:'admin', color: '#64748b', w: 30, h: 6, d: 30, x: 50, y: 3, z: -20, beds: 0, subNodes: [] }
         ];
 
         let blocks = [], connections = [], coreMeshes = [], corridorMeshes = [], l2Meshes = [], l2Lines = [];
@@ -611,14 +658,26 @@
         let currentTheme = 'dark';
         
         let areaChart, flowChart;
+        let windowAnalysisData = {}; // Global store for report
+
+        // Generative Design State
+        let generativeDesignRunning = false;
+        let candidateSolutions = [];
+        let currentIteration = 0;
+        let maxIterations = 100;
+        let bestSolutions = [];
 
         // Interaction Variables (Custom Drag)
         let isDragging = false;
+        let isSelecting = false;
         let draggedObject = null;
+        let startSelectionCoords = { x: 0, y: 0 };
         const dragOffset = new THREE.Vector3();
+        const dragStartPos = new THREE.Vector3(); 
         const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
         const raycaster = new THREE.Raycaster();
         const mouse = new THREE.Vector2();
+        const selectionBox = document.getElementById('selection-box');
 
         // Scene Setup
         const container = document.getElementById('canvas-container');
@@ -694,6 +753,7 @@
                 scene.add(grid);
             }
             updateConnections();
+            if(document.getElementById('view-report').classList.contains('active')) generateReport();
         };
 
         function createBlock(data) {
@@ -707,9 +767,11 @@
             mesh.castShadow = true;
             mesh.receiveShadow = true;
             
-            // Init SubNodes if missing
             if (!data.subNodes) data.subNodes = [];
             
+            // Assign default category if missing
+            if (!data.cat) data.cat = 'admin';
+
             mesh.userData = { ...data, originalColor: data.color };
             scene.add(mesh);
             blocks.push(mesh);
@@ -741,329 +803,13 @@
         function updateSystem() {
             updateConnections();
             updateL2Visuals();
+            updateAutoStructures(); // Restored
             analyzeMetrics();
             updateLabels();
             updateDiagnostics();
             if(isDaylightMode) runDaylightAnalysis();
             updateSliceView();
         }
-
-        // --- UI Logic: Matrix Switching ---
-        window.switchMatrixLevel = (level) => {
-            matrixLevel = level;
-            document.getElementById('tab-l1').classList.toggle('active', level === 'l1');
-            document.getElementById('tab-l2').classList.toggle('active', level === 'l2');
-            document.getElementById('matrix-hint').textContent = level === 'l1' 
-                ? '设置科室间吸引力 (0-5)' 
-                : '设置具体功能点之间的微观连接 (0-5)';
-            renderMatrix();
-        };
-
-        function renderMatrix() {
-            const el = document.getElementById('matrix-editor');
-            el.innerHTML = '';
-            
-            let items = [];
-            let getRelFn, setRelFn;
-
-            if (matrixLevel === 'l1') {
-                items = blocks;
-                getRelFn = (a,b) => getRelation(a.userData.id, b.userData.id);
-                setRelFn = (a,b,v) => setRelation(a.userData.id, b.userData.id, v);
-            } else {
-                // Flatten L2 Nodes
-                blocks.forEach(b => {
-                    b.userData.subNodes.forEach(sn => {
-                        items.push({ 
-                            userData: { 
-                                id: sn.id, 
-                                name: sn.id.replace(b.userData.id+'_', ''), // Show short name
-                                parentName: b.userData.name
-                            } 
-                        });
-                    });
-                });
-                getRelFn = (a,b) => getL2Relation(a.userData.id, b.userData.id);
-                setRelFn = (a,b,v) => setL2Relation(a.userData.id, b.userData.id, v);
-            }
-
-            const count = items.length;
-            if (count === 0) {
-                el.innerHTML = '<div class="text-xs text-center w-full py-4 opacity-50">暂无数据</div>';
-                return;
-            }
-
-            const cellSize = 24;
-            const labelColWidth = 80;
-            
-            el.style.gridTemplateColumns = `${labelColWidth}px repeat(${count}, ${cellSize}px)`;
-            
-            // Generate Rows
-            items.forEach((b1, i) => {
-                // Row Label
-                const label = document.createElement('div');
-                label.className = 'matrix-row-label';
-                label.innerText = b1.userData.name;
-                if(matrixLevel === 'l2') label.title = b1.userData.parentName + ' > ' + b1.userData.name;
-                el.appendChild(label);
-
-                // Cells
-                items.forEach((b2, j) => {
-                    const cell = document.createElement('div');
-                    
-                    if(i === j) {
-                        cell.className = 'matrix-cell-diagonal';
-                        cell.innerText = '·';
-                    } else if (j > i) {
-                        cell.className = 'matrix-cell-hidden';
-                    } else {
-                        const val = getRelFn(b1, b2);
-                        cell.className = `matrix-cell val-${val}`;
-                        cell.innerText = val > 0 ? val : '';
-                        cell.title = `${b1.userData.name} <-> ${b2.userData.name}`;
-                        cell.onclick = () => {
-                            const n = (val + 1) % 6;
-                            setRelFn(b1, b2, n);
-                            renderMatrix();
-                            updateSystem();
-                        };
-                    }
-                    el.appendChild(cell);
-                });
-            });
-
-            // Generate Footer Header
-            el.appendChild(document.createElement('div'));
-            items.forEach(b => {
-                const d = document.createElement('div');
-                d.className = 'matrix-header';
-                d.innerText = b.userData.name.substring(0,6);
-                el.appendChild(d);
-            });
-        }
-
-        // --- L2 (Sub-unit) Logic ---
-        
-        window.addL2Unit = () => {
-            if(selectedBlocks.length !== 1) return;
-            const b = selectedBlocks[0];
-            const count = b.userData.subNodes.length + 1;
-            const newId = `${b.userData.id}_u${count}`;
-            // Random pos within parent
-            const rx = (Math.random()-0.5) * (b.scale.x * 0.8);
-            const rz = (Math.random()-0.5) * (b.scale.z * 0.8);
-            
-            b.userData.subNodes.push({
-                id: newId,
-                x: rx, y: 0, z: rz // Local coords relative to parent center
-            });
-            updateSystem();
-            fillPropertyPanel(b); // Refresh UI list
-            if (matrixLevel === 'l2') renderMatrix();
-        };
-
-        window.deleteL2Unit = (idx) => {
-            if(selectedBlocks.length !== 1) return;
-            const b = selectedBlocks[0];
-            const sn = b.userData.subNodes[idx];
-            // Remove connections
-            Object.keys(l2Matrix).forEach(k => { if(k.includes(sn.id)) delete l2Matrix[k]; });
-            b.userData.subNodes.splice(idx, 1);
-            updateSystem();
-            fillPropertyPanel(b);
-            if (matrixLevel === 'l2') renderMatrix();
-        };
-
-        function updateL2Visuals() {
-            // Clean up old L2 meshes
-            l2Meshes.forEach(m => scene.remove(m));
-            l2Lines.forEach(l => scene.remove(l));
-            l2Meshes = [];
-            l2Lines = [];
-            
-            const worldPositions = {}; // id -> Vector3
-
-            // 1. Draw SubNodes (Cubes)
-            blocks.forEach(b => {
-                b.userData.subNodes.forEach(sn => {
-                    const geo = new THREE.BoxGeometry(2, 2, 2);
-                    const mat = new THREE.MeshBasicMaterial({ color: 0xf97316, depthTest: false });
-                    const mesh = new THREE.Mesh(geo, mat);
-                    
-                    // Transform local to world
-                    const worldPos = new THREE.Vector3(sn.x, sn.y, sn.z);
-                    worldPos.applyEuler(b.rotation);
-                    worldPos.add(b.position);
-                    
-                    mesh.position.copy(worldPos);
-                    mesh.renderOrder = 999; // Always on top
-                    scene.add(mesh);
-                    l2Meshes.push(mesh);
-                    worldPositions[sn.id] = worldPos;
-                });
-            });
-
-            // 2. Draw L2 Connections
-            Object.keys(l2Matrix).forEach(key => {
-                const strength = l2Matrix[key];
-                if(strength <= 0) return;
-                const [id1, id2] = key.split('-');
-                const p1 = worldPositions[id1];
-                const p2 = worldPositions[id2];
-                
-                if(p1 && p2) {
-                    const geo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
-                    const mat = new THREE.LineBasicMaterial({ 
-                        color: 0xf97316, 
-                        transparent: true, 
-                        opacity: 0.8,
-                        linewidth: 2 
-                    });
-                    const line = new THREE.Line(geo, mat);
-                    scene.add(line);
-                    l2Lines.push(line);
-                }
-            });
-        }
-
-        function fillPropertyPanel(mesh) {
-            document.getElementById('selection-panel').style.display = 'block';
-            document.getElementById('no-selection').style.display = 'none';
-            document.getElementById('multi-selection-panel').style.display = 'none';
-            
-            const d = mesh.userData;
-            document.getElementById('prop-name').value = d.name;
-            document.getElementById('prop-color').value = d.color;
-            document.getElementById('prop-beds').value = d.beds || 0;
-            document.getElementById('prop-w').value = mesh.scale.x;
-            document.getElementById('prop-h').value = mesh.scale.y;
-            document.getElementById('prop-d').value = mesh.scale.z;
-            document.getElementById('prop-y').value = mesh.position.y;
-            document.getElementById('prop-area-input').value = (mesh.scale.x * mesh.scale.z).toFixed(0);
-            
-            // L2 Units List
-            const l2List = document.getElementById('l2-units-list');
-            l2List.innerHTML = '';
-            d.subNodes.forEach((sn, idx) => {
-                const tag = document.createElement('div');
-                tag.className = 'bg-orange-500/20 text-orange-400 border border-orange-500/50 rounded px-2 py-1 text-[10px] flex items-center gap-2';
-                tag.innerHTML = `<span>${sn.id.split('_').pop()}</span> <i class="fas fa-times cursor-pointer hover:text-white" onclick="deleteL2Unit(${idx})"></i>`;
-                l2List.appendChild(tag);
-            });
-            
-            updatePropStats(mesh);
-        }
-
-        // --- Physics Logic ---
-        
-        // Mode 0: Off
-        // Mode 1: L1 Only (Block to Block)
-        // Mode 2: L2 (Particle Physics + Parent Drag)
-        
-        window.setPhysicsMode = (mode) => {
-            physicsMode = mode;
-            [0,1,2].forEach(m => document.getElementById(`btn-phy-${m}`).classList.toggle('active', m === mode));
-        };
-
-        function applyPhysics() {
-            if(physicsMode === 0 || isDragging) return;
-
-            // 1. Block Repulsion (Prevent Overlap) - Applies to Mode 1 & 2
-            blocks.forEach(b1 => {
-                let force = new THREE.Vector3(0,0,0);
-                
-                // Keep near center
-                if(b1.position.length() > 200) force.add(b1.position.clone().negate().multiplyScalar(0.01));
-
-                blocks.forEach(b2 => {
-                    if(b1 === b2) return;
-                    const dist = b1.position.distanceTo(b2.position);
-                    const minDist = (Math.max(b1.scale.x, b1.scale.z) + Math.max(b2.scale.x, b2.scale.z)) / 1.8;
-                    const dy = Math.abs(b1.position.y - b2.position.y);
-                    
-                    // Collision repulse
-                    if(dist < minDist && dy < (b1.scale.y+b2.scale.y)/2) {
-                        const diff = new THREE.Vector3().subVectors(b1.position, b2.position);
-                        force.add(diff.normalize().multiplyScalar((minDist - dist) * 0.2));
-                    }
-                });
-                
-                b1.position.add(force);
-            });
-
-            // 2. L1 Attraction (Mode 1 Only)
-            if (physicsMode === 1) {
-                connections.forEach(c => {
-                   if (c.strength > 0) {
-                       const diff = new THREE.Vector3().subVectors(c.b2.position, c.b1.position);
-                       const dist = diff.length();
-                       const target = 50 - (c.strength * 5); // Stronger = closer
-                       if (dist > target) {
-                           const pull = diff.normalize().multiplyScalar((dist - target) * 0.005 * c.strength);
-                           c.b1.position.add(pull);
-                           c.b2.position.sub(pull);
-                       }
-                   } 
-                });
-            }
-
-            // 3. L2 Physics (Mode 2 Only)
-            if (physicsMode === 2) {
-                // Map L2 nodes to world positions for calculation
-                const l2World = {};
-                blocks.forEach(b => {
-                    b.userData.subNodes.forEach(sn => {
-                        const wp = new THREE.Vector3(sn.x, sn.y, sn.z).add(b.position);
-                        l2World[sn.id] = { pos: wp, parent: b, local: sn };
-                    });
-                });
-
-                Object.keys(l2Matrix).forEach(k => {
-                    const str = l2Matrix[k];
-                    if (str <= 0) return;
-                    const [id1, id2] = k.split('-');
-                    const n1 = l2World[id1];
-                    const n2 = l2World[id2];
-
-                    if (n1 && n2) {
-                        const diff = new THREE.Vector3().subVectors(n2.pos, n1.pos);
-                        const dist = diff.length();
-                        const targetDist = 10; // L2 wants to be very close
-                        
-                        if (dist > targetDist) {
-                            const forceMag = (dist - targetDist) * 0.01 * str;
-                            const force = diff.normalize().multiplyScalar(forceMag);
-                            
-                            // A. Move Particles Locally (Internal Optimization)
-                            // Constrain to parent box size roughly
-                            const limitX = n1.parent.scale.x / 2;
-                            const limitZ = n1.parent.scale.z / 2;
-                            
-                            n1.local.x = THREE.MathUtils.clamp(n1.local.x + force.x, -limitX, limitX);
-                            n1.local.z = THREE.MathUtils.clamp(n1.local.z + force.z, -limitZ, limitZ);
-                            
-                            n2.local.x = THREE.MathUtils.clamp(n2.local.x - force.x, -n2.parent.scale.x/2, n2.parent.scale.x/2);
-                            n2.local.z = THREE.MathUtils.clamp(n2.local.z - force.z, -n2.parent.scale.z/2, n2.parent.scale.z/2);
-
-                            // B. Drag Parent Blocks (Global Optimization)
-                            const parentDragFactor = 0.2; 
-                            n1.parent.position.add(force.multiplyScalar(parentDragFactor));
-                            n2.parent.position.sub(force.multiplyScalar(parentDragFactor));
-                        }
-                    }
-                });
-            }
-            
-            updateConnections();
-        }
-
-        // --- Standard Logic from previous version ---
-        
-        window.toggleLabels = () => {
-            showDistanceLabels = !showDistanceLabels;
-            document.getElementById('btn-labels').classList.toggle('active', showDistanceLabels);
-            connections.forEach(c => { if (c.label) c.label.style.display = showDistanceLabels ? 'block' : 'none'; });
-        };
 
         function updateConnections() {
             connections.forEach(c => { scene.remove(c.line); c.label.remove(); });
@@ -1101,46 +847,101 @@
             }
         }
 
-        function analyzeMetrics() {
-            // Basic FRI calculation
-            let totalWeightedDist = 0;
-            let blackRooms = 0;
-            let totalVol = 0, totalSurf = 0;
+        // --- Auto Structures (Restored) ---
+        function updateAutoStructures() {
+            // Clean up old
+            coreMeshes.forEach(m => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); });
+            corridorMeshes.forEach(m => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); });
+            coreMeshes = []; corridorMeshes = [];
+            totalPublicArea = 0;
+
+            // Only show if not in pure physics drag mode to save perfs
+            if(isDragging) return;
+
+            const hSegs = [];
             
-            connections.forEach(c => { totalWeightedDist += c.distTotal * c.strength; });
-            const fri = connections.length ? (totalWeightedDist / (connections.length * 50)) : 0;
-            
-            blocks.forEach(b => {
-                const w = b.scale.x, h = b.scale.y, d = b.scale.z;
-                totalVol += w*h*d;
-                totalSurf += 2*(w*h+h*d+w*d);
+            // 1. Identify shafts based on vertical connections
+            const rawShafts = [];
+            connections.forEach(c => {
+                if (c.strength > 0 && c.distV > 4) { // Only vertical connections > 4m
+                    const p1 = c.b1.position;
+                    const p2 = c.b2.position;
+                    
+                    // Simple shaft placement logic at midpoint XZ
+                    const shaftX = (p1.x + p2.x) / 2;
+                    const shaftZ = (p1.z + p2.z) / 2;
+                    const minY = Math.min(p1.y, p2.y);
+                    const maxY = Math.max(p1.y, p2.y);
+                    
+                    rawShafts.push({ x: shaftX, z: shaftZ, minY, maxY, strength: c.strength });
+                }
                 
-                // Simple overlap check for daylight
-                let covered = 0;
-                blocks.forEach(o => {
-                   if(b===o) return;
-                   const dx = Math.abs(b.position.x - o.position.x);
-                   const dz = Math.abs(b.position.z - o.position.z);
-                   if (dx < (b.scale.x+o.scale.x)/2 && dz < (b.scale.z+o.scale.z)/2) covered++;
-                });
-                b.userData.isLandlocked = covered >= 3;
-                if(b.userData.isLandlocked) blackRooms++;
+                // Collect horizontal segments for corridors
+                // Simply connect block centers if on same floor range
+                if (Math.abs(c.b1.position.y - c.b2.position.y) < 2) {
+                    const y = c.b1.position.y - c.b1.scale.y/2 + 1; // Floor level
+                    const p1 = c.b1.position; const p2 = c.b2.position;
+                    // X-segment
+                    if (Math.abs(p1.x - p2.x) > 1) {
+                        hSegs.push({ axis: 'x', y: y, z: p1.z, min: Math.min(p1.x, p2.x), max: Math.max(p1.x, p2.x) });
+                    }
+                    // Z-segment (from p2.x)
+                    if (Math.abs(p1.z - p2.z) > 1) {
+                        hSegs.push({ axis: 'z', y: y, x: p2.x, min: Math.min(p1.z, p2.z), max: Math.max(p1.z, p2.z) });
+                    }
+                }
             });
 
-            const compactness = totalVol > 0 ? (totalSurf/totalVol) : 0;
-            
-            updateKPI('kpi-flow', fri.toFixed(2), fri > 1.5 ? 'bad' : 'good');
-            updateKPI('kpi-vh', (fri*0.4).toFixed(2), 'good'); // Dummy calculation
-            updateKPI('kpi-light', blackRooms, blackRooms > 0 ? 'bad' : 'good');
+            // 2. Merge shafts (Clustering)
+            const mergedShafts = [];
+            rawShafts.forEach(raw => {
+                let merged = false;
+                for(let bank of mergedShafts) {
+                    const dist = Math.sqrt((raw.x - bank.x)**2 + (raw.z - bank.z)**2);
+                    if (dist < 15) { // Merge radius
+                        bank.x = (bank.x + raw.x) / 2;
+                        bank.z = (bank.z + raw.z) / 2;
+                        bank.minY = Math.min(bank.minY, raw.minY);
+                        bank.maxY = Math.max(bank.maxY, raw.maxY);
+                        bank.strength = Math.max(bank.strength, raw.strength);
+                        merged = true;
+                        break;
+                    }
+                }
+                if (!merged) mergedShafts.push(raw);
+            });
+
+            // 3. Render Cores
+            mergedShafts.forEach(bank => {
+                const height = bank.maxY - bank.minY + 4;
+                const width = bank.strength > 3 ? 6 : 4;
+                const depth = bank.strength > 3 ? 6 : 4;
+                const geo = new THREE.BoxGeometry(width, height, depth);
+                const mat = new THREE.MeshBasicMaterial({ color: 0x64748b, transparent: true, opacity: 0.5 });
+                const mesh = new THREE.Mesh(geo, mat);
+                mesh.position.set(bank.x, (bank.minY + bank.maxY)/2, bank.z);
+                scene.add(mesh);
+                coreMeshes.push(mesh);
+                totalPublicArea += width * depth * (height / 4); // Approx floors
+            });
+
+            // 4. Render Corridors (Simplified)
+            hSegs.forEach(s => {
+                const len = s.max - s.min;
+                if(len < 2) return;
+                const w = 2; 
+                const geo = s.axis === 'x' ? new THREE.BoxGeometry(len, 0.5, w) : new THREE.BoxGeometry(w, 0.5, len);
+                const mat = new THREE.MeshBasicMaterial({ color: 0xcbd5e1, transparent: true, opacity: 0.4 });
+                const mesh = new THREE.Mesh(geo, mat);
+                if (s.axis === 'x') mesh.position.set(s.min + len/2, s.y, s.z);
+                else mesh.position.set(s.x, s.y, s.min + len/2);
+                scene.add(mesh);
+                corridorMeshes.push(mesh);
+                totalPublicArea += len * w;
+            });
         }
 
-        function updateKPI(id, val, status) {
-            const el = document.getElementById(id);
-            el.querySelector('.kpi-value').innerText = val;
-            el.className = `kpi-card ${status}`;
-        }
-
-        // --- Interaction & Events (Selection, etc) ---
+        // --- Interaction Logic (Fixed: Box Select vs Drag) ---
         
         container.addEventListener('mousedown', onMouseDown);
         container.addEventListener('mousemove', onMouseMove);
@@ -1157,55 +958,645 @@
             const intersects = raycaster.intersectObjects(blocks);
             
             if(intersects.length > 0) {
-                controls.enabled = false; // Disable orbit controls
+                // Clicked on object -> Drag
                 isDragging = true;
+                isSelecting = false;
+                controls.enabled = false;
                 draggedObject = intersects[0].object;
                 
-                // Calculate drag offset
                 const intersectPoint = intersects[0].point;
                 dragOffset.copy(draggedObject.position).sub(intersectPoint);
+                dragStartPos.copy(draggedObject.position);
+                dragPlane.constant = -intersectPoint.y; 
                 
-                // Select if not selected
                 if(!selectedBlocks.includes(draggedObject)) {
                     handleSelection([draggedObject]);
                 }
-                
-                // Set drag plane height
-                dragPlane.constant = -intersectPoint.y; 
             } else {
-                handleSelection([]);
+                // Clicked on background -> Box Select
+                isDragging = false;
+                isSelecting = true;
+                startSelectionCoords = { x: e.clientX, y: e.clientY };
+                selectionBox.style.display = 'block';
+                selectionBox.style.left = e.clientX + 'px';
+                selectionBox.style.top = e.clientY + 'px';
+                selectionBox.style.width = '0px';
+                selectionBox.style.height = '0px';
             }
         }
 
         function onMouseMove(e) {
-            if(!isDragging || !draggedObject) return;
-            
-            const rect = container.getBoundingClientRect();
-            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-            
-            raycaster.setFromCamera(mouse, camera);
-            const intersectPoint = new THREE.Vector3();
-            raycaster.ray.intersectPlane(dragPlane, intersectPoint);
-            
-            if(intersectPoint) {
-                const newPos = intersectPoint.add(dragOffset);
-                // Simple Lock Y for now (or snapping logic if needed)
-                draggedObject.position.set(newPos.x, draggedObject.position.y, newPos.z);
+            if (isDragging && draggedObject) {
+                const rect = container.getBoundingClientRect();
+                mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
                 
-                updateConnections();
-                // Labels update automatically in animate loop
+                raycaster.setFromCamera(mouse, camera);
+                const intersectPoint = new THREE.Vector3();
+                raycaster.ray.intersectPlane(dragPlane, intersectPoint);
+                
+                if(intersectPoint) {
+                    const newPos = intersectPoint.add(dragOffset);
+                    let targetX = newPos.x;
+                    let targetZ = newPos.z;
+
+                    if (e.shiftKey) {
+                        const dx = Math.abs(targetX - dragStartPos.x);
+                        const dz = Math.abs(targetZ - dragStartPos.z);
+                        if (dx > dz) targetZ = dragStartPos.z; 
+                        else targetX = dragStartPos.x;
+                    }
+
+                    draggedObject.position.set(targetX, draggedObject.position.y, targetZ);
+                    updateSystem(); // Realtime update
+                }
+            } else if (isSelecting) {
+                const left = Math.min(startSelectionCoords.x, e.clientX);
+                const top = Math.min(startSelectionCoords.y, e.clientY);
+                const width = Math.abs(e.clientX - startSelectionCoords.x);
+                const height = Math.abs(e.clientY - startSelectionCoords.y);
+                
+                selectionBox.style.left = left + 'px';
+                selectionBox.style.top = top + 'px';
+                selectionBox.style.width = width + 'px';
+                selectionBox.style.height = height + 'px';
             }
         }
 
-        function onMouseUp() {
+        function onMouseUp(e) {
             if(isDragging) {
                 isDragging = false;
                 draggedObject = null;
                 controls.enabled = true;
-                updateSystem(); 
                 saveState();
+            } else if (isSelecting) {
+                isSelecting = false;
+                selectionBox.style.display = 'none';
+                
+                // Calculate selection
+                const rect = container.getBoundingClientRect();
+                const left = Math.min(startSelectionCoords.x, e.clientX);
+                const top = Math.min(startSelectionCoords.y, e.clientY);
+                const width = Math.abs(e.clientX - startSelectionCoords.x);
+                const height = Math.abs(e.clientY - startSelectionCoords.y);
+                
+                // If it was just a click (tiny box), deselect
+                if (width < 5 && height < 5) {
+                    handleSelection([]);
+                    return;
+                }
+
+                const newSelection = [];
+                blocks.forEach(b => {
+                    const v = b.position.clone().project(camera);
+                    const x = (v.x * 0.5 + 0.5) * rect.width + rect.left;
+                    const y = (-(v.y) * 0.5 + 0.5) * rect.height + rect.top;
+                    if(x >= left && x <= left + width && y >= top && y <= top + height) {
+                        newSelection.push(b);
+                    }
+                });
+                
+                // Handle Ctrl for multi-select
+                if (e.ctrlKey) {
+                    handleSelection([...selectedBlocks, ...newSelection]);
+                } else {
+                    handleSelection(newSelection);
+                }
             }
+        }
+
+        // --- Export Data (Restored & Updated) ---
+        window.exportData = () => {
+            const data = {
+                version: "2.1",
+                timestamp: new Date().toISOString(),
+                blocks: blocks.map(b => ({
+                    id: b.userData.id,
+                    name: b.userData.name,
+                    cat: b.userData.cat,
+                    color: b.userData.color,
+                    beds: b.userData.beds,
+                    pos: { x: b.position.x, y: b.position.y, z: b.position.z },
+                    scale: { w: b.scale.x, h: b.scale.y, d: b.scale.z },
+                    subNodes: b.userData.subNodes
+                })),
+                l1Matrix: matrix,
+                l2Matrix: l2Matrix,
+                metrics: windowAnalysisData
+            };
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], {type : 'application/json'});
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `hospital_plan_v2.1_${Date.now()}.json`;
+            a.click();
+        };
+
+        // --- Report Generation (Restored) ---
+        function generateReport() {
+            // Calculate areas
+            const catAreas = { 'public': totalPublicArea };
+            let totalArea = totalPublicArea;
+            let totalBeds = 0;
+
+            blocks.forEach(b => {
+                const area = b.scale.x * b.scale.z;
+                const cat = b.userData.cat || 'admin';
+                if(!catAreas[cat]) catAreas[cat] = 0;
+                catAreas[cat] += area;
+                totalArea += area;
+                totalBeds += (b.userData.beds || 0);
+            });
+
+            // 1. Render Charts
+            const ctxArea = document.getElementById('areaChart').getContext('2d');
+            const ctxFlow = document.getElementById('flowChart').getContext('2d');
+            
+            if(areaChart) areaChart.destroy();
+            if(flowChart) flowChart.destroy();
+
+            const style = getComputedStyle(document.body);
+            const textColor = style.getPropertyValue('--chart-text').trim();
+            const gridColor = style.getPropertyValue('--chart-grid').trim();
+
+            const labels = [], data = [], colors = [];
+            Object.keys(gbBenchmarks).forEach(k => {
+                if(catAreas[k] > 0) {
+                    labels.push(gbBenchmarks[k].label);
+                    data.push(catAreas[k]);
+                    colors.push(gbBenchmarks[k].color);
+                }
+            });
+
+            areaChart = new Chart(ctxArea, {
+                type: 'doughnut',
+                data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0 }] },
+                options: { responsive: true, plugins: { legend: { position: 'right', labels: { color: textColor } } } }
+            });
+
+            const deptLabels = blocks.map(b => b.userData.name);
+            const deptFlow = blocks.map(b => {
+                let load = 0;
+                connections.forEach(c => { if(c.b1===b || c.b2===b) load += c.strength * c.distTotal; });
+                return load;
+            });
+
+            flowChart = new Chart(ctxFlow, {
+                type: 'bar',
+                data: { labels: deptLabels, datasets: [{ label: '流程负荷', data: deptFlow, backgroundColor: '#3b82f6', borderRadius: 4 }] },
+                options: { responsive: true, scales: { y: { grid: {color:gridColor}, ticks:{color:textColor} }, x: { ticks:{color:textColor}, grid: {display:false} } }, plugins: { legend: { display: false } } }
+            });
+
+            // 2. Compliance Table
+            const compBody = document.getElementById('compliance-table-body');
+            compBody.innerHTML = '';
+            Object.keys(gbBenchmarks).forEach(k => {
+                const b = gbBenchmarks[k];
+                const area = catAreas[k] || 0;
+                const ratio = totalArea > 0 ? (area/totalArea*100) : 0;
+                let status = '合理', cls = 'status-ok';
+                if(ratio < b.min) { status='偏低'; cls='status-warn'; }
+                if(ratio > b.max) { status='偏高'; cls='status-warn'; }
+                
+                compBody.innerHTML += `
+                    <tr class="report-cell">
+                        <td class="font-bold" style="color:${b.color}">${b.label}</td>
+                        <td class="font-mono">${area.toFixed(0)}</td>
+                        <td class="font-mono">${ratio.toFixed(1)}%</td>
+                        <td class="text-xs" style="color:var(--text-muted)">${b.min}%-${b.max}%</td>
+                        <td><span class="status-badge ${cls}">${status}</span></td>
+                    </tr>
+                `;
+            });
+
+            // 3. KPI Table
+            const kpiBody = document.getElementById('report-table-body');
+            const metrics = windowAnalysisData;
+            kpiBody.innerHTML = `
+                <tr class="report-cell"><td class="py-2 text-blue-400 font-bold">总建筑面积</td><td class="font-mono text-white">${totalArea.toFixed(0)} m²</td><td class="text-xs text-gray-500">-</td><td>-</td></tr>
+                <tr class="report-cell"><td class="py-2 text-blue-400 font-bold">总床位数</td><td class="font-mono text-white">${totalBeds}</td><td class="text-xs text-gray-500">-</td><td>-</td></tr>
+                <tr class="report-cell"><td class="py-2">单床建筑面积</td><td class="font-mono text-white">${totalBeds>0 ? (totalArea/totalBeds).toFixed(1) : 0} m²/bed</td><td class="text-xs text-gray-500">60-90</td><td>${totalBeds>0 ? ((totalArea/totalBeds)>60?'OK':'Low') : '-'}</td></tr>
+                <tr class="report-cell"><td class="py-2">流程阻力 (FRI)</td><td class="font-mono text-white">${metrics.fri}</td><td class="text-xs text-gray-500"><1.0</td><td>${metrics.fri<1.0?'<span class="status-badge status-ok">优</span>':'<span class="status-badge status-bad">需优化</span>'}</td></tr>
+                <tr class="report-cell"><td class="py-2">垂直效能 (VEC)</td><td class="font-mono text-white">${metrics.vhRatio}</td><td class="text-xs text-gray-500"><1.4</td><td>${metrics.vhRatio<1.4?'<span class="status-badge status-ok">优</span>':'<span class="status-badge status-warn">一般</span>'}</td></tr>
+            `;
+        }
+
+        // --- Generative Design (Restored) ---
+        window.startGenerativeDesign = () => {
+            if(generativeDesignRunning) {
+                generativeDesignRunning = false;
+                document.querySelector('button[onclick="startGenerativeDesign()"]').innerHTML = '<i class="fas fa-dice"></i> 生成式设计';
+                return; 
+            }
+            if(blocks.length === 0) return alert("请先添加科室");
+
+            generativeDesignRunning = true;
+            currentIteration = 0;
+            candidateSolutions = [];
+            bestSolutions = [];
+            document.querySelector('button[onclick="startGenerativeDesign()"]').textContent = '停止生成';
+            
+            showGenerativePanel();
+            runGenerativeIteration();
+        };
+
+        function showGenerativePanel() {
+            let panel = document.getElementById('gen-panel');
+            if(!panel) {
+                panel = document.createElement('div');
+                panel.id = 'gen-panel';
+                panel.className = 'panel';
+                panel.style.cssText = 'position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:400px; padding:20px; z-index:3000;';
+                panel.innerHTML = `
+                    <h3 class="text-lg font-bold mb-2">正在优化布局...</h3>
+                    <div class="text-sm mb-1">迭代: <span id="gen-iter">0</span> / ${maxIterations}</div>
+                    <div class="w-full bg-gray-700 h-2 rounded mb-4"><div id="gen-bar" class="bg-blue-500 h-2 rounded" style="width:0%"></div></div>
+                    <div id="gen-best" class="text-xs text-green-400 mb-4">最佳分数: 0</div>
+                    <button class="btn btn-secondary w-full" onclick="window.startGenerativeDesign()">停止并应用最佳</button>
+                `;
+                document.body.appendChild(panel);
+            }
+            panel.style.display = 'block';
+        }
+
+        function runGenerativeIteration() {
+            if(!generativeDesignRunning || currentIteration >= maxIterations) {
+                finishGenerativeDesign();
+                return;
+            }
+            currentIteration++;
+            
+            // Mutation Logic
+            const bestBase = bestSolutions.length > 0 ? bestSolutions[0] : null;
+            
+            // Create a conceptual layout (don't move meshes yet)
+            // Just simulate changing positions
+            let newLayout = blocks.map(b => ({ id: b.userData.id, pos: b.position.clone() }));
+            
+            // Apply random mutation
+            const idx = Math.floor(Math.random() * newLayout.length);
+            const target = newLayout[idx];
+            target.pos.x += (Math.random()-0.5) * 20;
+            target.pos.z += (Math.random()-0.5) * 20;
+            
+            // Score it (Simulated)
+            // In a real app we'd need a separate physics world. Here we just approximate score
+            // by checking distances against matrix preferences.
+            let score = 0;
+            let distPenalty = 0;
+            
+            for(let i=0; i<newLayout.length; i++) {
+                for(let j=i+1; j<newLayout.length; j++) {
+                    const b1 = newLayout[i];
+                    const b2 = newLayout[j];
+                    const str = getRelation(b1.id, b2.id);
+                    if(str > 0) {
+                        const d = b1.pos.distanceTo(b2.pos);
+                        distPenalty += d * str;
+                    }
+                }
+            }
+            score = 10000 - distPenalty; // Higher is better
+
+            bestSolutions.push({ layout: newLayout, score: score });
+            bestSolutions.sort((a,b) => b.score - a.score);
+            if(bestSolutions.length > 5) bestSolutions.pop();
+
+            // Update UI
+            document.getElementById('gen-iter').innerText = currentIteration;
+            document.getElementById('gen-bar').style.width = (currentIteration/maxIterations*100) + '%';
+            document.getElementById('gen-best').innerText = '最佳分数: ' + bestSolutions[0].score.toFixed(0);
+
+            setTimeout(runGenerativeIteration, 10);
+        }
+
+        function finishGenerativeDesign() {
+            generativeDesignRunning = false;
+            document.querySelector('button[onclick="startGenerativeDesign()"]').innerHTML = '<i class="fas fa-dice"></i> 生成式设计';
+            document.getElementById('gen-panel').style.display = 'none';
+            
+            if(bestSolutions.length > 0) {
+                const best = bestSolutions[0];
+                best.layout.forEach(item => {
+                    const block = blocks.find(b => b.userData.id === item.id);
+                    if(block) block.position.copy(item.pos);
+                });
+                updateSystem();
+                alert("已应用最佳生成布局");
+            }
+        }
+
+        // --- Common Helpers ---
+        window.switchMatrixLevel = (level) => {
+            matrixLevel = level;
+            document.getElementById('tab-l1').classList.toggle('active', level === 'l1');
+            document.getElementById('tab-l2').classList.toggle('active', level === 'l2');
+            document.getElementById('matrix-hint').textContent = level === 'l1' 
+                ? '设置科室间吸引力 (0-5)' 
+                : '设置具体功能点之间的微观连接 (0-5)';
+            renderMatrix();
+        };
+
+        function renderMatrix() {
+            const el = document.getElementById('matrix-editor');
+            el.innerHTML = '';
+            
+            let items = [];
+            let getRelFn, setRelFn;
+
+            if (matrixLevel === 'l1') {
+                items = blocks;
+                getRelFn = (a,b) => getRelation(a.userData.id, b.userData.id);
+                setRelFn = (a,b,v) => setRelation(a.userData.id, b.userData.id, v);
+            } else {
+                blocks.forEach(b => {
+                    b.userData.subNodes.forEach(sn => {
+                        items.push({ 
+                            userData: { 
+                                id: sn.id, 
+                                name: sn.id.replace(b.userData.id+'_', ''), 
+                                parentName: b.userData.name
+                            } 
+                        });
+                    });
+                });
+                getRelFn = (a,b) => getL2Relation(a.userData.id, b.userData.id);
+                setRelFn = (a,b,v) => setL2Relation(a.userData.id, b.userData.id, v);
+            }
+
+            const count = items.length;
+            if (count === 0) {
+                el.innerHTML = '<div class="text-xs text-center w-full py-4 opacity-50">暂无数据</div>';
+                return;
+            }
+
+            const cellSize = 24;
+            const labelColWidth = 80;
+            el.style.gridTemplateColumns = `${labelColWidth}px repeat(${count}, ${cellSize}px)`;
+            
+            items.forEach((b1, i) => {
+                const label = document.createElement('div');
+                label.className = 'matrix-row-label';
+                label.innerText = b1.userData.name;
+                if(matrixLevel === 'l2') label.title = b1.userData.parentName + ' > ' + b1.userData.name;
+                el.appendChild(label);
+
+                items.forEach((b2, j) => {
+                    const cell = document.createElement('div');
+                    if(i === j) {
+                        cell.className = 'matrix-cell-diagonal';
+                        cell.innerText = '·';
+                    } else if (j > i) {
+                        cell.className = 'matrix-cell-hidden';
+                    } else {
+                        const val = getRelFn(b1, b2);
+                        cell.className = `matrix-cell val-${val}`;
+                        cell.innerText = val > 0 ? val : '';
+                        cell.onclick = () => {
+                            const n = (val + 1) % 6;
+                            setRelFn(b1, b2, n);
+                            renderMatrix();
+                            updateSystem();
+                        };
+                    }
+                    el.appendChild(cell);
+                });
+            });
+
+            el.appendChild(document.createElement('div'));
+            items.forEach(b => {
+                const d = document.createElement('div');
+                d.className = 'matrix-header';
+                d.innerText = b.userData.name.substring(0,6);
+                el.appendChild(d);
+            });
+        }
+
+        window.addL2Unit = () => {
+            if(selectedBlocks.length !== 1) return;
+            const b = selectedBlocks[0];
+            const count = b.userData.subNodes.length + 1;
+            const newId = `${b.userData.id}_u${count}`;
+            const rx = (Math.random()-0.5) * (b.scale.x * 0.8);
+            const rz = (Math.random()-0.5) * (b.scale.z * 0.8);
+            b.userData.subNodes.push({ id: newId, x: rx, y: 0, z: rz });
+            updateSystem();
+            fillPropertyPanel(b);
+            if (matrixLevel === 'l2') renderMatrix();
+        };
+
+        window.deleteL2Unit = (idx) => {
+            if(selectedBlocks.length !== 1) return;
+            const b = selectedBlocks[0];
+            const sn = b.userData.subNodes[idx];
+            Object.keys(l2Matrix).forEach(k => { if(k.includes(sn.id)) delete l2Matrix[k]; });
+            b.userData.subNodes.splice(idx, 1);
+            updateSystem();
+            fillPropertyPanel(b);
+            if (matrixLevel === 'l2') renderMatrix();
+        };
+
+        function updateL2Visuals() {
+            l2Meshes.forEach(m => scene.remove(m));
+            l2Lines.forEach(l => scene.remove(l));
+            l2Meshes = []; l2Lines = [];
+            const worldPositions = {};
+
+            blocks.forEach(b => {
+                b.userData.subNodes.forEach(sn => {
+                    const geo = new THREE.BoxGeometry(2, 2, 2);
+                    const mat = new THREE.MeshBasicMaterial({ color: 0xf97316, depthTest: false });
+                    const mesh = new THREE.Mesh(geo, mat);
+                    const worldPos = new THREE.Vector3(sn.x, sn.y, sn.z).applyEuler(b.rotation).add(b.position);
+                    mesh.position.copy(worldPos);
+                    mesh.renderOrder = 999;
+                    scene.add(mesh);
+                    l2Meshes.push(mesh);
+                    worldPositions[sn.id] = worldPos;
+                });
+            });
+
+            Object.keys(l2Matrix).forEach(key => {
+                const strength = l2Matrix[key];
+                if(strength <= 0) return;
+                const [id1, id2] = key.split('-');
+                const p1 = worldPositions[id1];
+                const p2 = worldPositions[id2];
+                if(p1 && p2) {
+                    const geo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+                    const mat = new THREE.LineBasicMaterial({ color: 0xf97316, transparent: true, opacity: 0.8, linewidth: 2 });
+                    const line = new THREE.Line(geo, mat);
+                    scene.add(line);
+                    l2Lines.push(line);
+                }
+            });
+        }
+
+        function fillPropertyPanel(mesh) {
+            document.getElementById('selection-panel').style.display = 'block';
+            document.getElementById('no-selection').style.display = 'none';
+            document.getElementById('multi-selection-panel').style.display = 'none';
+            const d = mesh.userData;
+            document.getElementById('prop-name').value = d.name;
+            document.getElementById('prop-color').value = d.color;
+            document.getElementById('prop-beds').value = d.beds || 0;
+            document.getElementById('prop-w').value = mesh.scale.x;
+            document.getElementById('prop-h').value = mesh.scale.y;
+            document.getElementById('prop-d').value = mesh.scale.z;
+            document.getElementById('prop-y').value = mesh.position.y;
+            document.getElementById('prop-area-input').value = (mesh.scale.x * mesh.scale.z).toFixed(0);
+            
+            const l2List = document.getElementById('l2-units-list');
+            l2List.innerHTML = '';
+            d.subNodes.forEach((sn, idx) => {
+                const tag = document.createElement('div');
+                tag.className = 'bg-orange-500/20 text-orange-400 border border-orange-500/50 rounded px-2 py-1 text-[10px] flex items-center gap-2';
+                tag.innerHTML = `<span>${sn.id.split('_').pop()}</span> <i class="fas fa-times cursor-pointer hover:text-white" onclick="deleteL2Unit(${idx})"></i>`;
+                l2List.appendChild(tag);
+            });
+            updatePropStats(mesh);
+        }
+
+        window.setPhysicsMode = (mode) => {
+            physicsMode = mode;
+            [0,1,2].forEach(m => document.getElementById(`btn-phy-${m}`).classList.toggle('active', m === mode));
+        };
+
+        function applyPhysics() {
+            if(physicsMode === 0 || isDragging) return;
+
+            blocks.forEach(b1 => {
+                let force = new THREE.Vector3(0,0,0);
+                if(b1.position.length() > 200) force.add(b1.position.clone().negate().multiplyScalar(0.01));
+                blocks.forEach(b2 => {
+                    if(b1 === b2) return;
+                    const dist = b1.position.distanceTo(b2.position);
+                    const minDist = (Math.max(b1.scale.x, b1.scale.z) + Math.max(b2.scale.x, b2.scale.z)) / 1.8;
+                    const dy = Math.abs(b1.position.y - b2.position.y);
+                    if(dist < minDist && dy < (b1.scale.y+b2.scale.y)/2) {
+                        const diff = new THREE.Vector3().subVectors(b1.position, b2.position);
+                        force.add(diff.normalize().multiplyScalar((minDist - dist) * 0.2));
+                    }
+                });
+                b1.position.add(force);
+            });
+
+            if (physicsMode === 1) {
+                connections.forEach(c => {
+                   if (c.strength > 0) {
+                       const diff = new THREE.Vector3().subVectors(c.b2.position, c.b1.position);
+                       const dist = diff.length();
+                       const target = 50 - (c.strength * 5);
+                       if (dist > target) {
+                           const pull = diff.normalize().multiplyScalar((dist - target) * 0.005 * c.strength);
+                           c.b1.position.add(pull);
+                           c.b2.position.sub(pull);
+                       }
+                   } 
+                });
+            }
+
+            if (physicsMode === 2) {
+                const l2World = {};
+                blocks.forEach(b => {
+                    b.userData.subNodes.forEach(sn => {
+                        const wp = new THREE.Vector3(sn.x, sn.y, sn.z).add(b.position);
+                        l2World[sn.id] = { pos: wp, parent: b, local: sn };
+                    });
+                });
+                Object.keys(l2Matrix).forEach(k => {
+                    const str = l2Matrix[k];
+                    if (str <= 0) return;
+                    const [id1, id2] = k.split('-');
+                    const n1 = l2World[id1];
+                    const n2 = l2World[id2];
+                    if (n1 && n2) {
+                        const diff = new THREE.Vector3().subVectors(n2.pos, n1.pos);
+                        const dist = diff.length();
+                        const targetDist = 10;
+                        if (dist > targetDist) {
+                            const forceMag = (dist - targetDist) * 0.01 * str;
+                            const force = diff.normalize().multiplyScalar(forceMag);
+                            const limitX = n1.parent.scale.x / 2;
+                            const limitZ = n1.parent.scale.z / 2;
+                            n1.local.x = THREE.MathUtils.clamp(n1.local.x + force.x, -limitX, limitX);
+                            n1.local.z = THREE.MathUtils.clamp(n1.local.z + force.z, -limitZ, limitZ);
+                            n2.local.x = THREE.MathUtils.clamp(n2.local.x - force.x, -n2.parent.scale.x/2, n2.parent.scale.x/2);
+                            n2.local.z = THREE.MathUtils.clamp(n2.local.z - force.z, -n2.parent.scale.z/2, n2.parent.scale.z/2);
+                            const parentDragFactor = 0.2; 
+                            n1.parent.position.add(force.multiplyScalar(parentDragFactor));
+                            n2.parent.position.sub(force.multiplyScalar(parentDragFactor));
+                        }
+                    }
+                });
+            }
+            updateConnections();
+        }
+
+        window.toggleLabels = () => {
+            showDistanceLabels = !showDistanceLabels;
+            document.getElementById('btn-labels').classList.toggle('active', showDistanceLabels);
+            connections.forEach(c => { if (c.label) c.label.style.display = showDistanceLabels ? 'block' : 'none'; });
+        };
+
+        window.toggleDaylightMode = () => {
+            isDaylightMode = !isDaylightMode;
+            document.getElementById('btn-daylight').classList.toggle('active');
+            if(!isDaylightMode) {
+                blocks.forEach(b => {
+                    b.material.color.set(b.userData.originalColor);
+                    b.material.emissive.set(0x000000);
+                });
+            } else {
+                runDaylightAnalysis();
+            }
+        };
+
+        function runDaylightAnalysis() {
+            blocks.forEach(b => {
+                if(b.userData.isLandlocked) {
+                    b.material.color.set(0x333333); b.material.emissive.set(0x000000);
+                } else {
+                    const h = Math.min(b.position.y / 50, 1);
+                    b.material.color.setHSL(0.1 + h*0.1, 0.8, 0.5);
+                }
+            });
+        }
+
+        function analyzeMetrics() {
+            let totalWeightedDist = 0;
+            let blackRooms = 0;
+            let totalVol = 0, totalSurf = 0;
+            connections.forEach(c => { totalWeightedDist += c.distTotal * c.strength; });
+            const fri = connections.length ? (totalWeightedDist / (connections.length * 50)) : 0;
+            blocks.forEach(b => {
+                const w = b.scale.x, h = b.scale.y, d = b.scale.z;
+                totalVol += w*h*d;
+                totalSurf += 2*(w*h+h*d+w*d);
+                let covered = 0;
+                blocks.forEach(o => {
+                   if(b===o) return;
+                   const dx = Math.abs(b.position.x - o.position.x);
+                   const dz = Math.abs(b.position.z - o.position.z);
+                   if (dx < (b.scale.x+o.scale.x)/2 && dz < (b.scale.z+o.scale.z)/2) covered++;
+                });
+                b.userData.isLandlocked = covered >= 3;
+                if(b.userData.isLandlocked) blackRooms++;
+            });
+            const compactness = totalVol > 0 ? (totalSurf/totalVol) : 0;
+            
+            const metrics = { fri: fri.toFixed(2), vhRatio: (fri*0.4).toFixed(2), blackRooms, compactness: compactness.toFixed(2) };
+            windowAnalysisData = metrics;
+
+            updateKPI('kpi-flow', metrics.fri, fri > 1.5 ? 'bad' : 'good');
+            updateKPI('kpi-vh', metrics.vhRatio, 'good');
+            updateKPI('kpi-light', blackRooms, blackRooms > 0 ? 'bad' : 'good');
+        }
+
+        function updateKPI(id, val, status) {
+            const el = document.getElementById(id);
+            el.querySelector('.kpi-value').innerText = val;
+            el.className = `kpi-card ${status}`;
         }
 
         function handleSelection(selection) {
@@ -1228,9 +1619,7 @@
                  scene.remove(b);
                  if(b.userData.labelEl) b.userData.labelEl.remove();
                  blocks = blocks.filter(x => x !== b);
-                 // Clean up L1 matrix
                  Object.keys(matrix).forEach(k => { if(k.includes(b.userData.id)) delete matrix[k]; });
-                 // Clean up L2 matrix (subnodes)
                  b.userData.subNodes.forEach(sn => {
                     Object.keys(l2Matrix).forEach(k => { if(k.includes(sn.id)) delete l2Matrix[k]; });
                  });
@@ -1248,7 +1637,6 @@
             document.getElementById('prop-vol').innerText = vol.toFixed(0);
         }
 
-        // Prop inputs listeners
         ['prop-name','prop-beds'].forEach(id => {
             document.getElementById(id).addEventListener('input', e => {
                 if(selectedBlocks.length !== 1) return;
@@ -1276,9 +1664,6 @@
             const layer = document.getElementById('labels-layer');
             const old = layer.querySelectorAll('.dept-label');
             old.forEach(o => o.remove());
-            
-            // Re-create labels logic remains for data updates
-            // Position updates moved to animate loop for performance
             blocks.forEach(b => {
                 const el = document.createElement('div');
                 el.className = 'dept-label';
@@ -1288,6 +1673,12 @@
                 b.userData.labelEl = el;
                 layer.appendChild(el);
             });
+            document.getElementById('dept-list').innerHTML = blocks.map(b => 
+                `<div class="flex justify-between items-center text-xs p-2 rounded cursor-pointer hover:bg-opacity-10 bg-white bg-opacity-5" onclick="window.focusBlock('${b.userData.id}')">
+                    <span class="flex items-center gap-2"><div style="width:8px;height:8px;border-radius:50%;background:${b.userData.color}"></div>${b.userData.name}</span>
+                    <span class="opacity-50">${b.userData.subNodes.length} pts</span>
+                 </div>`
+            ).join('');
         }
 
         window.focusBlock = (id) => {
@@ -1310,7 +1701,6 @@
             });
         }
         
-        // --- Standard View Helpers ---
         window.setView = (mode) => {
             const size = 300;
             const end = new THREE.Vector3();
@@ -1345,7 +1735,6 @@
             renderer.setSize(w, h);
         }
 
-        // --- Basic Utils ---
         window.toggleSidebar = (side) => {
             document.getElementById(`sidebar-${side}`).classList.toggle(`collapsed-${side}`);
             const icon = document.getElementById(`icon-${side}`);
@@ -1357,6 +1746,7 @@
             document.getElementById(`view-${id}`).classList.add('active');
             document.querySelector(`[onclick="switchTab('${id}')"]`).classList.add('active');
             if(id === '3d') onResize();
+            if(id === 'report') generateReport();
         };
         function saveState() {
              const state = {
@@ -1370,7 +1760,7 @@
         window.addNewDept = () => {
              saveState();
              const id = 'new_' + Date.now();
-             const b = createBlock({ id, name: '新科室', color: '#ec4899', w: 20, h: 5, d: 20, x: 0, y: 10, z: 0, beds: 0, subNodes: [] });
+             const b = createBlock({ id, name: '新科室', cat:'admin', color: '#ec4899', w: 20, h: 5, d: 20, x: 0, y: 10, z: 0, beds: 0, subNodes: [] });
              updateSystem();
              renderMatrix();
              handleSelection([b]);
@@ -1393,18 +1783,15 @@
             controls.update();
             applyPhysics();
             
-            // Sync Labels Position in Animation Loop
             if(blocks.length > 0) {
                 const rect = container.getBoundingClientRect();
                 
-                // Department Labels
                 blocks.forEach(b => {
                     if (b.userData.labelEl) {
                         const tempV = b.position.clone();
                         tempV.y += b.scale.y / 2 + 2; 
                         tempV.project(camera);
                         
-                        // Hide if outside or behind
                         if(tempV.z > 1 || Math.abs(tempV.x)>1 || Math.abs(tempV.y)>1) {
                             b.userData.labelEl.style.display = 'none';
                         } else {
@@ -1416,7 +1803,6 @@
                     }
                 });
 
-                // Distance Labels
                 connections.forEach(c => {
                     if (c.label) {
                         const tempV = c.mid.clone().project(camera);
