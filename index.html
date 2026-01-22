@@ -66,7 +66,8 @@
         
         /* Layout & Nav */
         #app-container { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
-        #main-nav { height: 56px; background: var(--bg-panel); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; z-index: 2000; backdrop-filter: blur(10px); transition: background 0.3s; }
+        /* Added position:relative to ensure z-index works, and flex-shrink:0 to prevent collapse */
+        #main-nav { height: 56px; background: var(--bg-panel); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; z-index: 2000; backdrop-filter: blur(10px); transition: background 0.3s; position: relative; flex-shrink: 0; }
         .nav-brand { font-weight: 700; font-size: 18px; color: #0ea5e9; display: flex; align-items: center; gap: 8px; }
         .nav-tabs { display: flex; gap: 4px; background: var(--border-faint); padding: 4px; border-radius: 8px; border: 1px solid var(--border-color); }
         .nav-tab { padding: 6px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
@@ -946,6 +947,8 @@
         container.addEventListener('mousedown', onMouseDown);
         container.addEventListener('mousemove', onMouseMove);
         window.addEventListener('mouseup', onMouseUp);
+        // [修复] 阻止浏览器默认右键菜单，防止干扰旋转操作和UI显示
+        container.addEventListener('contextmenu', (e) => e.preventDefault());
 
         function onMouseDown(e) {
             if(e.button !== 0) return;
