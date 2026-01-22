@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>医院空间效能规划系统 V3.2 (Gumball Fix)</title>
+    <title>医院空间效能规划系统 V3.3 (L2 Properties)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -358,7 +358,7 @@
 <body>
 
     <nav id="main-nav">
-        <div class="nav-brand"><i class="fas fa-hospital-symbol"></i> MC-SPACE V3.2 (Gumball Fix)</div>
+        <div class="nav-brand"><i class="fas fa-hospital-symbol"></i> MC-SPACE V3.3 (L2 Properties)</div>
         <div class="nav-tabs">
             <div class="nav-tab active" onclick="switchTab('3d')"><i class="fas fa-cube"></i> 3D 规划</div>
             <div class="nav-tab" onclick="switchTab('report')"><i class="fas fa-chart-pie"></i> 效能报告</div>
@@ -512,7 +512,7 @@
                                 <label class="text-[10px] font-bold text-blue-400">二级功能点 (L2)</label>
                                 <button class="btn btn-orange px-2 py-1 text-[10px]" onclick="addL2Unit()"><i class="fas fa-plus"></i> 添加</button>
                             </div>
-                            <div id="l2-units-list" class="flex flex-wrap gap-1"></div>
+                            <div id="l2-units-list" class="flex flex-col gap-1 max-h-[200px] overflow-y-auto"></div>
                         </div>
 
                         <div class="form-group">
@@ -641,8 +641,8 @@
         };
 
         const initialDepts = [
-            { id: 'er', name: '急诊部', cat:'emergency', color: '#ef4444', w: 40, h: 5, d: 30, x: -50, y: 2.5, z: 20, beds: 30, subNodes: [{id:'er_triage', x:0, y:0, z:10}, {id:'er_resus', x:10, y:0, z:-5}] },
-            { id: 'img', name: '医技中心', cat:'medtech', color: '#3b82f6', w: 30, h: 5, d: 25, x: 0, y: 2.5, z: 20, beds: 0, subNodes: [{id:'img_ct', x:0, y:0, z:0}] },
+            { id: 'er', name: '急诊部', cat:'emergency', color: '#ef4444', w: 40, h: 5, d: 30, x: -50, y: 2.5, z: 20, beds: 30, subNodes: [{id:'er_triage', name:'分诊台', type:'人员', x:0, y:0, z:10}, {id:'er_resus', name:'复苏室', type:'设备', x:10, y:0, z:-5}] },
+            { id: 'img', name: '医技中心', cat:'medtech', color: '#3b82f6', w: 30, h: 5, d: 25, x: 0, y: 2.5, z: 20, beds: 0, subNodes: [{id:'img_ct', name:'CT室', type:'设备', x:0, y:0, z:0}] },
             { id: 'op', name: '门诊部', cat:'outpatient', color: '#22c55e', w: 60, h: 8, d: 40, x: 0, y: 4, z: 70, beds: 0, subNodes: [] },
             { id: 'surg', name: '手术部', cat:'medtech', color: '#a855f7', w: 40, h: 6, d: 40, x: 0, y: 10, z: 0, beds: 0, subNodes: [] },
             { id: 'icu', name: 'ICU', cat:'medtech', color: '#f97316', w: 25, h: 5, d: 20, x: -40, y: 10, z: 0, beds: 20, subNodes: [] },
@@ -1478,7 +1478,7 @@
                         items.push({ 
                             userData: { 
                                 id: sn.id, 
-                                name: sn.id.replace(b.userData.id+'_', ''), 
+                                name: sn.name || sn.id.replace(b.userData.id+'_', ''), 
                                 parentName: b.userData.name
                             } 
                         });
@@ -1543,7 +1543,13 @@
             const newId = `${b.userData.id}_u${count}`;
             const rx = (Math.random()-0.5) * (b.userData.w * 0.8);
             const rz = (Math.random()-0.5) * (b.userData.d * 0.8);
-            b.userData.subNodes.push({ id: newId, x: rx, y: 0, z: rz });
+            // Default Name and Type
+            b.userData.subNodes.push({ 
+                id: newId, 
+                name: `功能点_${count}`,
+                type: '设备',
+                x: rx, y: 0, z: rz 
+            });
             updateSystem();
             fillPropertyPanel(b);
             if (matrixLevel === 'l2') renderMatrix();
@@ -1560,6 +1566,17 @@
             if (matrixLevel === 'l2') renderMatrix();
         };
 
+        window.updateSubNodeName = (idx, val) => {
+            if(selectedBlocks.length !== 1) return;
+            selectedBlocks[0].userData.subNodes[idx].name = val;
+            if (matrixLevel === 'l2') renderMatrix();
+        };
+
+        window.updateSubNodeType = (idx, val) => {
+            if(selectedBlocks.length !== 1) return;
+            selectedBlocks[0].userData.subNodes[idx].type = val;
+        };
+
         function updateL2Visuals() {
             l2Meshes.forEach(m => scene.remove(m));
             l2Lines.forEach(l => scene.remove(l));
@@ -1568,8 +1585,6 @@
 
             blocks.forEach(b => {
                 b.userData.subNodes.forEach(sn => {
-                    // Also use Extrusion for L2 particles for consistency, though simple Box is usually fine
-                    // For performance on small items, box geometry is efficient.
                     const geo = new THREE.BoxGeometry(2, 2, 2); 
                     const mat = new THREE.MeshBasicMaterial({ color: 0xf97316, depthTest: false });
                     const mesh = new THREE.Mesh(geo, mat);
@@ -1611,7 +1626,6 @@
             document.getElementById('prop-d').value = d.d;
             document.getElementById('prop-y').value = mesh.position.y;
             
-            // Calculate Area based on shape points
             let area = 0;
             if (d.points) {
                 let areaSum = 0;
@@ -1629,19 +1643,56 @@
             const l2List = document.getElementById('l2-units-list');
             l2List.innerHTML = '';
             d.subNodes.forEach((sn, idx) => {
-                const tag = document.createElement('div');
-                tag.className = 'bg-orange-500/20 text-orange-400 border border-orange-500/50 rounded px-2 py-1 text-[10px] flex items-center gap-2';
-                tag.innerHTML = `<span>${sn.id.split('_').pop()}</span> <i class="fas fa-times cursor-pointer hover:text-white" onclick="deleteL2Unit(${idx})"></i>`;
-                l2List.appendChild(tag);
+                const row = document.createElement('div');
+                row.className = 'flex flex-col gap-1 mb-2 p-2 bg-white/5 rounded border border-white/10';
+                
+                // Header
+                const header = document.createElement('div');
+                header.className = 'flex justify-between items-center text-[10px] text-gray-400';
+                header.innerHTML = `<span>ID: ${sn.id.split('_').pop()}</span> <i class="fas fa-times cursor-pointer hover:text-red-400" onclick="deleteL2Unit(${idx})"></i>`;
+                row.appendChild(header);
+
+                // Inputs
+                const inputs = document.createElement('div');
+                inputs.className = 'flex gap-1';
+                
+                // Name Input
+                const nameInput = document.createElement('input');
+                nameInput.type = 'text';
+                nameInput.className = 'w-1/2 bg-black/20 border border-white/10 rounded px-1 text-[10px] text-white';
+                nameInput.value = sn.name || sn.id;
+                nameInput.placeholder = '名称';
+                nameInput.onchange = (e) => updateSubNodeName(idx, e.target.value);
+                
+                // Type Select
+                const typeSelect = document.createElement('select');
+                typeSelect.className = 'w-1/2 bg-black/20 border border-white/10 rounded px-1 text-[10px] text-white';
+                const types = ['设备', '人员', '病患', '物资', '洁净', '污物', '其他'];
+                types.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t;
+                    opt.text = t;
+                    if(sn.type === t) opt.selected = true;
+                    typeSelect.appendChild(opt);
+                });
+                typeSelect.onchange = (e) => updateSubNodeType(idx, e.target.value);
+
+                inputs.appendChild(nameInput);
+                inputs.appendChild(typeSelect);
+                row.appendChild(inputs);
+
+                l2List.appendChild(row);
             });
             updatePropStats(mesh);
             
-            // Handle Shape Edit Toggle State
             if(isShapeEditMode) {
                 createShapeHandles(mesh);
             }
         }
 
+        // ... [Rest of the code remains the same] ...
+        // (animate, setPhysicsMode, applyPhysics, updateBlockGeometry, etc.)
+        
         window.setPhysicsMode = (mode) => {
             physicsMode = mode;
             [0,1,2].forEach(m => document.getElementById(`btn-phy-${m}`).classList.toggle('active', m === mode));
