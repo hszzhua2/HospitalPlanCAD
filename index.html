@@ -1,0 +1,1444 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>医院空间效能规划系统 V2.0 (L2 Matrix Support)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <style>
+        /* --- Theme Variables --- */
+        :root {
+            /* Dark Mode (Default) */
+            --bg-app: #0f172a;
+            --bg-gradient-center: #1e293b;
+            --bg-gradient-edge: #0f172a;
+            --bg-panel: rgba(15, 23, 42, 0.95);
+            --bg-panel-solid: #0f172a;
+            --text-main: #e2e8f0;
+            --text-muted: #94a3b8;
+            --border-color: rgba(255, 255, 255, 0.15);
+            --border-faint: rgba(255, 255, 255, 0.05);
+            --input-bg: #0f172a;
+            --input-border: #334155;
+            --btn-ghost-hover: rgba(255, 255, 255, 0.1);
+            --shadow-color: rgba(0, 0, 0, 0.4);
+            --kpi-bg: rgba(15, 23, 42, 0.85);
+            --matrix-bg: #1e293b;
+            --matrix-border: #334155;
+            --grid-line-1: #334155;
+            --grid-line-2: #1e293b;
+            --chart-grid: #334155;
+            --chart-text: #94a3b8;
+            --ai-msg-user: #1e3a8a;
+            --ai-msg-bot: #1e293b;
+        }
+
+        [data-theme="light"] {
+            /* Light Mode */
+            --bg-app: #f8fafc;
+            --bg-gradient-center: #ffffff;
+            --bg-gradient-edge: #e2e8f0;
+            --bg-panel: rgba(255, 255, 255, 0.95);
+            --bg-panel-solid: #ffffff;
+            --text-main: #1e293b;
+            --text-muted: #64748b;
+            --border-color: rgba(0, 0, 0, 0.15);
+            --border-faint: rgba(0, 0, 0, 0.05);
+            --input-bg: #ffffff;
+            --input-border: #cbd5e1;
+            --btn-ghost-hover: rgba(0, 0, 0, 0.05);
+            --shadow-color: rgba(0, 0, 0, 0.1);
+            --kpi-bg: rgba(255, 255, 255, 0.85);
+            --matrix-bg: #f1f5f9;
+            --matrix-border: #cbd5e1;
+            --grid-line-1: #cbd5e1;
+            --grid-line-2: #e2e8f0;
+            --chart-grid: #e2e8f0;
+            --chart-text: #64748b;
+            --ai-msg-user: #dbeafe;
+            --ai-msg-bot: #f1f5f9;
+        }
+
+        body { margin: 0; overflow: hidden; font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-app); color: var(--text-main); transition: background-color 0.3s, color 0.3s; }
+        
+        /* Layout & Nav */
+        #app-container { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+        #main-nav { height: 56px; background: var(--bg-panel); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; z-index: 2000; backdrop-filter: blur(10px); transition: background 0.3s; }
+        .nav-brand { font-weight: 700; font-size: 18px; color: #0ea5e9; display: flex; align-items: center; gap: 8px; }
+        .nav-tabs { display: flex; gap: 4px; background: var(--border-faint); padding: 4px; border-radius: 8px; border: 1px solid var(--border-color); }
+        .nav-tab { padding: 6px 16px; border-radius: 6px; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.2s; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+        .nav-tab:hover { color: var(--text-main); background: var(--btn-ghost-hover); }
+        .nav-tab.active { background: #0ea5e9; color: white; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+
+        /* Views */
+        .view-section { flex: 1; position: relative; overflow: hidden; display: none; }
+        .view-section.active { display: block; }
+        #canvas-container { width: 100%; height: 100%; display: block; outline: none; background: radial-gradient(circle at center, var(--bg-gradient-center) 0%, var(--bg-gradient-edge) 100%); }
+
+        /* Generic Panels */
+        .panel { background: var(--bg-panel); backdrop-filter: blur(12px); border: 1px solid var(--border-color); border-radius: 12px; pointer-events: auto; box-shadow: 0 8px 32px var(--shadow-color); z-index: 100; transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s; }
+        
+        /* Sidebars */
+        .sidebar { position: absolute; top: 16px; bottom: 16px; width: 380px; display: flex; flex-direction: column; overflow: visible; padding: 0; }
+        .sidebar.left { left: 16px; } .sidebar.right { right: 16px; }
+        .sidebar.collapsed-left { transform: translateX(-396px); } .sidebar.collapsed-right { transform: translateX(396px); }
+        .sidebar-header { padding: 16px; border-bottom: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; background: var(--border-faint); }
+        .sidebar-content { flex: 1; overflow-y: auto; padding: 16px; }
+        .sidebar-content::-webkit-scrollbar { width: 4px; }
+        .sidebar-content::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 4px; }
+
+        /* Toggle Buttons */
+        .toggle-btn { position: absolute; top: 50%; transform: translateY(-50%); width: 20px; height: 48px; background: var(--matrix-border); border: 1px solid var(--border-color); color: var(--text-muted); display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; transition: all 0.2s; }
+        .toggle-btn:hover { background: #0ea5e9; color: white; }
+        .sidebar.left .toggle-btn { right: -20px; border-radius: 0 8px 8px 0; border-left: none; }
+        .sidebar.right .toggle-btn { left: -20px; border-radius: 8px 0 0 8px; border-right: none; }
+
+        /* Matrix Tabs */
+        .matrix-tabs { display: flex; width: 100%; border-bottom: 1px solid var(--border-color); margin-bottom: 10px; }
+        .matrix-tab { flex: 1; text-align: center; padding: 8px; font-size: 11px; font-weight: bold; cursor: pointer; color: var(--text-muted); border-bottom: 2px solid transparent; transition: all 0.2s; }
+        .matrix-tab.active { color: #0ea5e9; border-bottom-color: #0ea5e9; background: var(--bg-gradient-center); }
+        .matrix-tab:hover { color: var(--text-main); }
+
+        /* Analysis Dashboard */
+        #analysis-dashboard { 
+            position: absolute; 
+            bottom: 80px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            width: auto;
+            max-width: 80%;
+            height: auto; 
+            pointer-events: none; 
+            display: flex; 
+            justify-content: center; 
+            gap: 12px; 
+            z-index: 90; 
+            transition: all 0.3s; 
+        }
+        
+        .kpi-card { 
+            background: var(--kpi-bg); 
+            backdrop-filter: blur(8px); 
+            border: 1px solid var(--border-color); 
+            border-radius: 10px; 
+            padding: 12px 16px; 
+            width: 140px; 
+            min-height: 90px;
+            display: flex; 
+            flex-direction: column; 
+            justify-content: space-between; 
+            pointer-events: auto; 
+            box-shadow: 0 4px 12px var(--shadow-color); 
+            position: relative; 
+            overflow: hidden; 
+        }
+        
+        .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 3px; background: var(--text-muted); }
+        .kpi-card.good::before { background: #10b981; } .kpi-card.warn::before { background: #f59e0b; } .kpi-card.bad::before { background: #ef4444; }
+        .kpi-title { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+        .kpi-value { font-size: 20px; font-weight: 700; color: var(--text-main); font-family: 'JetBrains Mono', monospace; margin: 4px 0; }
+        .kpi-sub { font-size: 9px; color: var(--text-muted); line-height: 1.2; }
+
+        /* Slice Control Panel */
+        #slice-panel {
+            position: absolute;
+            bottom: 200px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--bg-panel);
+            backdrop-filter: blur(12px);
+            padding: 8px 20px;
+            border-radius: 16px;
+            border: 1px solid var(--border-color);
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            z-index: 95;
+            min-width: 400px;
+            pointer-events: auto;
+            box-shadow: 0 4px 20px var(--shadow-color);
+        }
+        /* Custom Toggle Switch */
+        .slice-toggle-wrapper { position: relative; width: 36px; height: 18px; }
+        .slice-checkbox { opacity: 0; width: 0; height: 0; }
+        .slice-slider-bg { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: var(--text-muted); transition: .4s; border-radius: 34px; }
+        .slice-slider-bg:before { position: absolute; content: ""; height: 14px; width: 14px; left: 2px; bottom: 2px; background-color: white; transition: .4s; border-radius: 50%; }
+        .slice-checkbox:checked + .slice-slider-bg { background-color: #0ea5e9; }
+        .slice-checkbox:checked + .slice-slider-bg:before { transform: translateX(18px); }
+        
+        input[type=range] { -webkit-appearance: none; background: transparent; width: 100%; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 14px; width: 14px; border-radius: 50%; background: #0ea5e9; cursor: pointer; margin-top: -5px; box-shadow: 0 0 0 2px var(--bg-app); }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: var(--border-color); border-radius: 2px; }
+
+        /* Matrix Editor - UPDATED STYLES */
+        .matrix-container { display: grid; gap: 2px; margin-top: 10px; overflow-x: auto; padding-bottom: 8px; max-height: 60vh; }
+        
+        .matrix-header { 
+            font-size: 10px; 
+            color: var(--text-muted); 
+            text-align: left; 
+            writing-mode: vertical-rl; 
+            height: 80px; 
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 4px 0;
+            font-weight: 500;
+        }
+        
+        .matrix-row-label { 
+            font-size: 10px;
+            color: var(--text-main); 
+            white-space: nowrap; 
+            text-align: right; 
+            padding-right: 10px; 
+            line-height: 24px;
+            font-weight: 500;
+        }
+        
+        .matrix-cell { 
+            width: 24px;
+            height: 24px;
+            background: var(--matrix-bg); 
+            border: 1px solid var(--matrix-border); 
+            border-radius: 3px; 
+            cursor: pointer; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 10px;
+            font-weight: 700;
+            color: transparent; 
+            transition: all 0.1s; 
+        }
+        .matrix-cell:hover { transform: scale(1.2); z-index: 10; border-color: var(--text-main); box-shadow: 0 0 8px rgba(0,0,0,0.3); }
+        
+        .matrix-cell.val-0 { background: var(--matrix-bg); }
+        .matrix-cell.val-1 { background: #172554; color: #60a5fa; } 
+        .matrix-cell.val-2 { background: #1e3a8a; color: white; } 
+        .matrix-cell.val-3 { background: #2563eb; color: white; } 
+        .matrix-cell.val-4 { background: #7c3aed; color: white; } 
+        .matrix-cell.val-5 { background: #db2777; color: white; box-shadow: 0 0 5px #db2777; }
+        
+        .matrix-cell-diagonal {
+            width: 24px; height: 24px;
+            background: rgba(255,255,255,0.03);
+            border: 1px dashed var(--border-faint);
+            border-radius: 3px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 8px; color: var(--border-color);
+            cursor: default;
+        }
+        .matrix-cell-hidden {
+            width: 24px; height: 24px;
+            background: transparent;
+            border: none;
+            pointer-events: none;
+        }
+
+        /* Diagnostics Panel */
+        .diag-item { padding: 8px; border-radius: 6px; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); margin-bottom: 6px; font-size: 11px; color: #fca5a5; display: flex; gap: 8px; align-items: start; }
+        [data-theme="light"] .diag-item { background: rgba(239, 68, 68, 0.05); color: #dc2626; border-color: rgba(239, 68, 68, 0.3); }
+        
+        .diag-item.warn { background: rgba(245, 158, 11, 0.1); border-color: rgba(245, 158, 11, 0.2); color: #fdba74; }
+        [data-theme="light"] .diag-item.warn { background: rgba(245, 158, 11, 0.05); color: #d97706; border-color: rgba(245, 158, 11, 0.3); }
+        
+        .diag-item.info { color: var(--text-muted); border-color: var(--border-color); background: var(--border-faint); }
+
+        /* UI Elements */
+        .btn { padding: 8px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; border: none; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+        .btn-primary { background: #0ea5e9; color: white; } .btn-primary:hover { background: #0284c7; }
+        .btn-secondary { background: var(--matrix-border); color: var(--text-main); } .btn-secondary:hover { background: var(--text-muted); color: white; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-ghost { background: transparent; color: var(--text-muted); border: 1px solid var(--border-color); } .btn-ghost:hover { background: var(--btn-ghost-hover); color: var(--text-main); }
+        .btn-success { background: #10b981; color: white; } .btn-success:hover { background: #059669; }
+        .btn-ai { background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%); color: white; border:1px solid rgba(255,255,255,0.2); box-shadow: 0 0 10px rgba(168, 85, 247, 0.4); }
+        .btn-ai:hover { box-shadow: 0 0 15px rgba(168, 85, 247, 0.6); transform: translateY(-1px); }
+        .btn-orange { background: rgba(249, 115, 22, 0.15); color: #fb923c; border: 1px solid rgba(249, 115, 22, 0.3); } .btn-orange:hover { background: rgba(249, 115, 22, 0.25); }
+
+        .form-group { margin-bottom: 12px; }
+        .form-label { font-size: 11px; color: var(--text-muted); display: block; margin-bottom: 4px; }
+        .form-input { width: 100%; background: var(--input-bg); border: 1px solid var(--input-border); color: var(--text-main); padding: 6px 8px; border-radius: 4px; font-size: 12px; }
+        .form-input:focus { border-color: #0ea5e9; outline: none; }
+
+        /* View Controls */
+        #view-controls { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: var(--bg-panel); padding: 6px 16px; border-radius: 99px; display: flex; gap: 8px; border: 1px solid var(--border-color); z-index: 90; align-items: center; box-shadow: 0 4px 12px var(--shadow-color); flex-wrap: wrap; justify-content: center; max-width: 90vw; }
+        .v-btn { padding: 4px 8px; border-radius: 12px; cursor: pointer; transition: all 0.2s; font-size: 11px; color: var(--text-muted); font-weight: 600; white-space: nowrap; }
+        .v-btn:hover, .v-btn.active { background: var(--matrix-border); color: var(--text-main); }
+        .v-btn-icon { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: var(--border-faint); color: var(--text-muted); cursor: pointer;}
+        .v-btn-icon:hover, .v-btn-icon.active { background: #0ea5e9; color: white; }
+
+        /* Zoom Controls */
+        #zoom-controls { position: absolute; bottom: 90px; right: 24px; display: flex; flex-direction: column; gap: 8px; z-index: 110; }
+        .btn-zoom { width: 36px; height: 36px; background: var(--bg-panel); backdrop-filter: blur(8px); border: 1px solid var(--border-color); border-radius: 10px; color: var(--text-muted); cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; box-shadow: 0 4px 12px var(--shadow-color); }
+        .btn-zoom:hover { background: #0ea5e9; color: white; transform: translateY(-1px); border-color: #0ea5e9; }
+        
+        /* Labels */
+        .dept-label { position: absolute; pointer-events: none; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; text-shadow: 0 2px 4px rgba(0,0,0,0.8); transition: opacity 0.2s; white-space: nowrap; }
+        .dept-name { background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: white; font-weight: 600; margin-bottom: 2px; border: 1px solid rgba(255,255,255,0.2); display: flex; gap: 4px; align-items: center; }
+        .dept-area { font-size: 10px; color: #94a3b8; background: rgba(255,255,255,0.1); padding: 0 4px; border-radius: 2px; }
+        .dept-issue { background: #ef4444; color: white; font-size: 10px; padding: 1px 4px; border-radius: 2px; margin-top: 2px; display: none; }
+        .dist-label { position: absolute; background: white; color: black; font-size: 10px; padding: 1px 4px; border-radius: 3px; font-weight: bold; transform: translate(-50%, -50%); font-family: monospace; border: 1px solid rgba(0,0,0,0.2); z-index: 5; }
+
+        /* Physics Modes */
+        .btn-mode-0 { color: var(--text-muted); }
+        .btn-mode-1 { color: #34d399; background: rgba(16, 185, 129, 0.15); }
+        .btn-mode-2 { color: #60a5fa; background: rgba(59, 130, 246, 0.2); }
+
+        /* Legend */
+        #legend { 
+            position: absolute; 
+            bottom: 190px; 
+            right: 24px; 
+            background: var(--bg-panel); 
+            padding: 8px 12px; 
+            border-radius: 8px; 
+            font-size: 10px; 
+            color: var(--text-muted); 
+            display: flex; 
+            flex-direction: column; 
+            gap: 4px; 
+            pointer-events: none; 
+            border: 1px solid var(--border-color); 
+            z-index: 100;
+        }
+        .legend-item { display: flex; align-items: center; gap: 6px; }
+        .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+        /* Selection Box */
+        #selection-box { position: absolute; border: 1px solid #0ea5e9; background: rgba(14, 165, 233, 0.2); pointer-events: none; display: none; z-index: 200; }
+        
+        /* Shortcut Hint */
+        #shortcut-hint { 
+            position: absolute; 
+            top: 70px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            pointer-events: none; 
+            background: var(--bg-panel); 
+            padding: 4px 12px; 
+            border-radius: 20px; 
+            font-size: 11px; 
+            color: var(--text-muted); 
+            opacity: 0.8; 
+            z-index: 80;
+            border: 1px solid var(--border-color);
+        }
+        
+        /* AI Chat */
+        .msg-bubble { padding: 8px 12px; border-radius: 12px; margin-bottom: 8px; max-width: 85%; font-size: 13px; line-height: 1.5; }
+        .msg-user { background: var(--ai-msg-user); color: var(--text-main); align-self: flex-end; border-radius: 12px 12px 0 12px; }
+        .msg-bot { background: var(--ai-msg-bot); color: var(--text-main); align-self: flex-start; border-radius: 12px 12px 12px 0; border: 1px solid var(--border-color); }
+        .msg-bot ul { list-style-type: disc; margin-left: 20px; margin-top: 4px; }
+        .msg-bot strong { color: #60a5fa; }
+        .typing-dot { width: 6px; height: 6px; background: var(--text-muted); border-radius: 50%; display: inline-block; animation: typing 1.4s infinite ease-in-out both; }
+        .typing-dot:nth-child(1) { animation-delay: -0.32s; } .typing-dot:nth-child(2) { animation-delay: -0.16s; }
+        @keyframes typing { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <nav id="main-nav">
+        <div class="nav-brand"><i class="fas fa-hospital-symbol"></i> MC-SPACE V2.0 (L2 Matrix)</div>
+        <div class="nav-tabs">
+            <div class="nav-tab active" onclick="switchTab('3d')"><i class="fas fa-cube"></i> 3D 规划</div>
+            <div class="nav-tab" onclick="switchTab('report')"><i class="fas fa-chart-pie"></i> 效能报告</div>
+        </div>
+        <div class="flex gap-2">
+            <button class="btn btn-ghost" onclick="toggleTheme()" title="切换主题"><i class="fas fa-moon" id="theme-icon"></i></button>
+            <div style="width:1px; background:var(--border-color); margin:0 4px;"></div>
+            <button class="btn btn-ai" onclick="openAIModal()"><i class="fas fa-magic"></i> AI Architect</button>
+            <button class="btn btn-secondary" onclick="exportData()"><i class="fas fa-download"></i></button>
+            <button class="btn btn-primary" onclick="runAutoOptimize()"><i class="fas fa-random"></i> 布局优化</button>
+        </div>
+    </nav>
+
+    <div id="app-container">
+        <!-- 3D VIEW -->
+        <div id="view-3d" class="view-section active">
+            <div id="canvas-container" tabindex="0"></div>
+            <div id="labels-layer" style="position: absolute; inset: 0; pointer-events: none; overflow: hidden;"></div>
+            <div id="selection-box"></div>
+
+            <div id="view-controls">
+                <div class="v-btn" onclick="setView('south')">南</div>
+                <div class="v-btn" onclick="setView('north')">北</div>
+                <div class="v-btn" onclick="setView('east')">东</div>
+                <div class="v-btn" onclick="setView('west')">西</div>
+                <div class="v-btn" onclick="setView('top')">顶</div>
+                <div class="v-btn" onclick="resetView()">重置</div>
+                <div style="width:1px; height:20px; background:var(--border-color); margin:0 4px;"></div>
+                <div class="v-btn-icon" id="btn-daylight" onclick="toggleDaylightMode()" title="采光热力图"><i class="fas fa-sun"></i></div>
+                <div class="v-btn-icon active" id="btn-labels" onclick="toggleLabels()" title="距离标注"><i class="fas fa-ruler-combined"></i></div>
+                
+                <div style="display:flex; align-items:center; background:var(--border-faint); border-radius:14px; padding:2px; border:1px solid var(--border-color);">
+                    <div style="padding:0 8px; font-size:11px; color:var(--text-muted);"><i class="fas fa-atom"></i></div>
+                    <div class="v-btn active" id="btn-phy-0" onclick="setPhysicsMode(0)" style="border-radius:10px;">关</div>
+                    <div class="v-btn" id="btn-phy-1" onclick="setPhysicsMode(1)" style="border-radius:10px;">L1</div>
+                    <div class="v-btn" id="btn-phy-2" onclick="setPhysicsMode(2)" style="border-radius:10px;">L2</div>
+                </div>
+            </div>
+            
+            <div id="slice-panel">
+                <div class="flex items-center gap-3">
+                    <span class="text-sm font-bold text-blue-400 flex items-center gap-2"><i class="fas fa-layer-group"></i> 切片</span>
+                    <label class="slice-toggle-wrapper">
+                        <input type="checkbox" class="slice-checkbox" id="slice-toggle" onchange="toggleSliceMode()">
+                        <span class="slice-slider-bg"></span>
+                    </label>
+                </div>
+                <div class="flex-1 flex items-center gap-3">
+                    <span class="text-xs font-mono" style="color:var(--text-muted)">0m</span>
+                    <input type="range" id="slice-slider" min="0" max="100" value="0" step="1" oninput="updateSliceHeight(this.value)">
+                    <span class="text-xs font-mono" style="color:var(--text-muted)">100m</span>
+                </div>
+                <div class="w-16 text-right"><span id="slice-display" class="text-xs font-mono font-bold" style="color:var(--text-main)">ALL</span></div>
+            </div>
+            
+            <div id="shortcut-hint">快捷键: 按住鼠标左键拖拽体块 | Ctrl+C/V 复制粘贴 | Ctrl+Z 撤销 | Del 删除</div>
+
+            <div id="zoom-controls">
+                <button class="btn-zoom" onclick="zoomIn()" title="放大"><i class="fas fa-plus"></i></button>
+                <button class="btn-zoom" onclick="zoomOut()" title="缩小"><i class="fas fa-minus"></i></button>
+            </div>
+
+            <!-- Analysis Dashboard -->
+            <div id="analysis-dashboard">
+                <div class="kpi-card" id="kpi-flow">
+                    <div class="kpi-title">流程阻力 (FRI)</div>
+                    <div class="kpi-value">0.0</div>
+                    <div class="kpi-sub">加权距离总量</div>
+                </div>
+                <div class="kpi-card" id="kpi-vh">
+                    <div class="kpi-title">垂直效能 (VEC)</div>
+                    <div class="kpi-value">0.00</div>
+                    <div class="kpi-sub">电梯等待惩罚</div>
+                </div>
+                <div class="kpi-card" id="kpi-light">
+                    <div class="kpi-title">黑房间</div>
+                    <div class="kpi-value">0</div>
+                    <div class="kpi-sub">个无采光</div>
+                </div>
+            </div>
+
+            <div id="legend">
+                <div class="legend-item"><div class="legend-dot" style="background:#ef4444"></div>强关联 (5)</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#3b82f6"></div>弱关联 (1-3)</div>
+                <div class="legend-item"><div class="legend-dot" style="background:#f97316"></div>L2 功能点</div>
+            </div>
+            
+            <!-- Left Sidebar -->
+            <div id="sidebar-left" class="sidebar left panel">
+                <div class="sidebar-header">
+                    <span class="text-sm font-bold" style="color:var(--text-main)"><i class="fas fa-project-diagram mr-2"></i>关联矩阵</span>
+                </div>
+                <div class="toggle-btn" onclick="toggleSidebar('left')"><i class="fas fa-chevron-left" id="icon-left"></i></div>
+                <div class="sidebar-content">
+                    <div class="matrix-tabs">
+                        <div class="matrix-tab active" id="tab-l1" onclick="switchMatrixLevel('l1')">L1 科室 (Macro)</div>
+                        <div class="matrix-tab" id="tab-l2" onclick="switchMatrixLevel('l2')">L2 功能点 (Quantum)</div>
+                    </div>
+                    
+                    <div class="text-[10px] mb-2" style="color:var(--text-muted)">
+                        <span id="matrix-hint">设置科室间吸引力 (0-5)</span>
+                    </div>
+                    <div id="matrix-editor" class="matrix-container mb-4"></div>
+                    
+                    <div class="border-t pt-4 mt-2" style="border-color:var(--border-color)">
+                        <div class="text-sm font-bold mb-2" style="color:var(--text-main)"><i class="fas fa-list mr-2"></i>清单</div>
+                        <div id="dept-list" class="flex flex-col gap-1"></div>
+                        <button class="btn btn-secondary w-full mt-3" onclick="addNewDept()"><i class="fas fa-plus"></i> 添加科室</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Sidebar -->
+            <div id="sidebar-right" class="sidebar right panel">
+                <div class="sidebar-header">
+                    <span class="text-sm font-bold" style="color:var(--text-main)"><i class="fas fa-sliders-h mr-2"></i>属性与诊断</span>
+                </div>
+                <div class="toggle-btn" onclick="toggleSidebar('right')"><i class="fas fa-chevron-right" id="icon-right"></i></div>
+                <div class="sidebar-content">
+                    <div id="selection-panel" style="display:none;">
+                        <div class="form-group">
+                            <label class="form-label">名称</label>
+                            <input type="text" id="prop-name" class="form-input">
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 mb-2">
+                            <div class="form-group">
+                                <label class="form-label">颜色</label>
+                                <input type="color" id="prop-color" class="form-input h-8 p-0">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">床位数</label>
+                                <input type="number" id="prop-beds" class="form-input">
+                            </div>
+                        </div>
+                        
+                        <!-- L2 Management -->
+                        <div class="bg-white/5 rounded p-2 mb-3 border border-white/10">
+                            <div class="flex justify-between items-center mb-2">
+                                <label class="text-[10px] font-bold text-blue-400">二级功能点 (L2)</label>
+                                <button class="btn btn-orange px-2 py-1 text-[10px]" onclick="addL2Unit()"><i class="fas fa-plus"></i> 添加功能点</button>
+                            </div>
+                            <div id="l2-units-list" class="flex flex-wrap gap-1"></div>
+                        </div>
+
+                        <div class="form-group">
+                            <label class="form-label">面积 (m²)</label>
+                            <input type="number" id="prop-area-input" class="form-input" placeholder="输入面积自动计算尺寸">
+                        </div>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div class="form-group"><label class="form-label">宽(X)</label><input type="number" id="prop-w" class="form-input"></div>
+                            <div class="form-group"><label class="form-label">高(Y)</label><input type="number" id="prop-h" class="form-input"></div>
+                            <div class="form-group"><label class="form-label">深(Z)</label><input type="number" id="prop-d" class="form-input"></div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">楼层高度 (Y Pos)</label>
+                            <input type="number" id="prop-y" class="form-input">
+                        </div>
+                        <div class="text-xs flex justify-between mt-1 mb-4" style="color:var(--text-muted)">
+                            <span>面积: <span id="prop-area" class="font-mono" style="color:var(--text-main)">0</span> m²</span>
+                            <span>体积: <span id="prop-vol" class="font-mono" style="color:var(--text-main)">0</span> m³</span>
+                        </div>
+                        <button class="btn btn-danger w-full" onclick="deleteSelection()">删除科室</button>
+                    </div>
+                    
+                    <div id="multi-selection-panel" style="display:none;" class="text-center py-6">
+                        <div class="text-xl font-bold text-blue-400 mb-2"><span id="multi-count">0</span> 个选中</div>
+                        <div class="text-xs mb-4" style="color:var(--text-muted)">已选中多个科室</div>
+                        <button class="btn btn-danger btn-sm" onclick="deleteSelection()">批量删除</button>
+                    </div>
+
+                    <div id="no-selection" class="text-center py-8 text-xs border border-dashed rounded" style="color:var(--text-muted); border-color:var(--border-color)">
+                        未选择对象<br>拖拽框选或点击模型
+                    </div>
+
+                    <div class="border-t pt-4 mt-4" style="border-color:var(--border-color)">
+                        <div class="text-sm font-bold mb-2" style="color:var(--text-main)"><i class="fas fa-stethoscope mr-2"></i>智能诊断</div>
+                        <div id="diagnostics-list"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Consultant Modal -->
+        <div id="ai-modal" class="panel" style="display:none; position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:600px; height:70vh; z-index:5000; flex-direction:column; overflow:hidden;">
+            <div class="sidebar-header" style="background:linear-gradient(to right, rgba(99, 102, 241, 0.1), transparent);">
+                <span class="text-sm font-bold flex items-center gap-2" style="color:#a855f7"><i class="fas fa-magic"></i>Gemini AI Architect</span>
+                <button onclick="closeAIModal()" class="text-gray-400 hover:text-white"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="ai-chat-content" class="p-4" style="flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:10px;">
+                <div class="msg-bot msg-bubble">
+                    Hello! I am your AI Architect Assistant connected to your 3D layout. 
+                    <br><br>I can analyze your hospital plan for CIBSE/GB compliance or answer specific questions about department placement.
+                </div>
+            </div>
+            <div class="p-3 border-t border-gray-700 bg-black/20 flex flex-col gap-2">
+                <button class="btn btn-ai w-full mb-1" onclick="runAIAnalysis()"><i class="fas fa-search-location mr-2"></i> Generate Full Critique Report</button>
+                <div class="flex gap-2">
+                    <input type="text" id="ai-chat-input" class="form-input" placeholder="Ask about the layout...">
+                    <button class="btn btn-secondary" onclick="sendAIChat()"><i class="fas fa-paper-plane"></i></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- REPORT VIEW -->
+        <div id="view-report" class="view-section" style="background:var(--bg-app); overflow-y:auto; padding:40px;">
+             <div class="max-w-5xl mx-auto">
+                <h2 class="text-2xl font-bold mb-6" style="color:var(--text-main)">空间效能分析报告</h2>
+                 <!-- Charts and Tables (Same as before) -->
+                 <div class="grid grid-cols-2 gap-6 mb-8">
+                     <div class="panel p-4"><div style="height:250px"><canvas id="areaChart"></canvas></div></div>
+                     <div class="panel p-4"><div style="height:230px"><canvas id="flowChart"></canvas></div></div>
+                 </div>
+                 <div class="panel p-6 mb-8">
+                     <h3 class="text-lg font-bold mb-4" style="color:var(--text-main)">详细效能指标</h3>
+                     <table class="w-full text-sm text-left" style="color:var(--text-muted)">
+                         <tbody id="report-table-body"></tbody>
+                     </table>
+                 </div>
+             </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { TransformControls } from 'three/addons/controls/TransformControls.js';
+
+        // --- Gemini API Setup ---
+        const apiKey = ""; 
+        const GEMINI_MODEL = "gemini-2.5-flash-preview-09-2025";
+
+        // --- Data & State ---
+        const initialDepts = [
+            { id: 'er', name: '急诊部', color: '#ef4444', w: 40, h: 5, d: 30, x: -50, y: 2.5, z: 20, beds: 30, subNodes: [{id:'er_triage', x:0, y:0, z:10}, {id:'er_resus', x:10, y:0, z:-5}] },
+            { id: 'img', name: '医技中心', color: '#3b82f6', w: 30, h: 5, d: 25, x: 0, y: 2.5, z: 20, beds: 0, subNodes: [{id:'img_ct', x:0, y:0, z:0}] },
+            { id: 'op', name: '门诊部', color: '#22c55e', w: 60, h: 8, d: 40, x: 0, y: 4, z: 70, beds: 0, subNodes: [] },
+            { id: 'surg', name: '手术部', color: '#a855f7', w: 40, h: 6, d: 40, x: 0, y: 10, z: 0, beds: 0, subNodes: [] },
+            { id: 'icu', name: 'ICU', color: '#f97316', w: 25, h: 5, d: 20, x: -40, y: 10, z: 0, beds: 20, subNodes: [] },
+            { id: 'ward1', name: '住院A', color: '#eab308', w: 60, h: 4, d: 20, x: 0, y: 20, z: -30, beds: 50, subNodes: [] },
+            { id: 'ward2', name: '住院B', color: '#eab308', w: 60, h: 4, d: 20, x: 0, y: 24, z: -30, beds: 50, subNodes: [] },
+            { id: 'log', name: '后勤供应', color: '#64748b', w: 30, h: 6, d: 30, x: 50, y: 3, z: -20, beds: 0, subNodes: [] }
+        ];
+
+        let blocks = [], connections = [], coreMeshes = [], corridorMeshes = [], l2Meshes = [], l2Lines = [];
+        let matrix = {}; // L1 Matrix
+        let l2Matrix = {}; // L2 Matrix: 'id1-id2': strength
+        let selectedBlocks = [];
+        let clipboard = [];
+        let historyStack = [];
+        let totalPublicArea = 0;
+        
+        let isDaylightMode = false;
+        let showDistanceLabels = true; 
+        let physicsMode = 0; // 0:Off, 1:L1 (2D), 2:L2 (Particle)
+        let matrixLevel = 'l1'; // 'l1' or 'l2'
+        let isSliceMode = false;
+        let sliceY = 0;
+        let currentTheme = 'dark';
+        
+        let areaChart, flowChart;
+
+        // Interaction Variables (Custom Drag)
+        let isDragging = false;
+        let draggedObject = null;
+        const dragOffset = new THREE.Vector3();
+        const dragPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2();
+
+        // Scene Setup
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene(); 
+        scene.background = new THREE.Color(0x0f172a);
+        
+        const camera = new THREE.OrthographicCamera(-1,1,1,-1,1,5000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        container.appendChild(renderer.domElement);
+
+        const controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.mouseButtons = { LEFT: null, MIDDLE: THREE.MOUSE.PAN, RIGHT: THREE.MOUSE.ROTATE }; 
+
+        const transformControl = new TransformControls(camera, renderer.domElement);
+        transformControl.addEventListener('dragging-changed', e => { 
+            controls.enabled = !e.value; 
+            if(e.value) saveState();
+            if(!e.value) updateSystem(); 
+        });
+        scene.add(transformControl);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(100, 200, 100);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+        
+        let grid = new THREE.GridHelper(400, 40, 0x334155, 0x1e293b);
+        scene.add(grid);
+
+        // --- Core Functions ---
+
+        function init() {
+            setRelation('er', 'img', 5);
+            setRelation('er', 'surg', 4);
+            setRelation('op', 'img', 3);
+            setRelation('surg', 'icu', 5);
+            setRelation('surg', 'img', 3);
+
+            initialDepts.forEach(createBlock);
+            
+            // Set initial L2 relations
+            setL2Relation('er_resus', 'img_ct', 5);
+
+            updateSystem();
+            renderMatrix();
+            window.addEventListener('resize', onResize);
+            onResize();
+            resetView();
+            animate();
+            saveState(); 
+        }
+
+        window.toggleTheme = () => {
+            currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', currentTheme);
+            const btn = document.getElementById('theme-icon');
+            
+            if(currentTheme === 'light') {
+                btn.className = 'fas fa-sun';
+                scene.background = new THREE.Color(0xf1f5f9);
+                scene.remove(grid);
+                grid = new THREE.GridHelper(400, 40, 0xcbd5e1, 0xe2e8f0);
+                scene.add(grid);
+            } else {
+                btn.className = 'fas fa-moon';
+                scene.background = new THREE.Color(0x0f172a);
+                scene.remove(grid);
+                grid = new THREE.GridHelper(400, 40, 0x334155, 0x1e293b);
+                scene.add(grid);
+            }
+            updateConnections();
+        };
+
+        function createBlock(data) {
+            const geo = new THREE.BoxGeometry(1, 1, 1);
+            const mat = new THREE.MeshStandardMaterial({ 
+                color: data.color, roughness: 0.4, metalness: 0.1, transparent: true, opacity: 0.9 
+            });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.set(data.x, data.y, data.z);
+            mesh.scale.set(data.w, data.h, data.d);
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+            
+            // Init SubNodes if missing
+            if (!data.subNodes) data.subNodes = [];
+            
+            mesh.userData = { ...data, originalColor: data.color };
+            scene.add(mesh);
+            blocks.push(mesh);
+            return mesh;
+        }
+
+        // L1 Matrix Helpers
+        function setRelation(id1, id2, str) {
+            if(id1 === id2) return;
+            const k = id1 < id2 ? `${id1}_${id2}` : `${id2}_${id1}`;
+            matrix[k] = parseInt(str);
+        }
+        function getRelation(id1, id2) {
+            const k = id1 < id2 ? `${id1}_${id2}` : `${id2}_${id1}`;
+            return matrix[k] || 0;
+        }
+
+        // L2 Matrix Helpers
+        function setL2Relation(id1, id2, str) {
+            if(id1 === id2) return;
+            const k = id1 < id2 ? `${id1}-${id2}` : `${id2}-${id1}`;
+            l2Matrix[k] = parseInt(str);
+        }
+        function getL2Relation(id1, id2) {
+            const k = id1 < id2 ? `${id1}-${id2}` : `${id2}-${id1}`;
+            return l2Matrix[k] || 0;
+        }
+
+        function updateSystem() {
+            updateConnections();
+            updateL2Visuals();
+            analyzeMetrics();
+            updateLabels();
+            updateDiagnostics();
+            if(isDaylightMode) runDaylightAnalysis();
+            updateSliceView();
+        }
+
+        // --- UI Logic: Matrix Switching ---
+        window.switchMatrixLevel = (level) => {
+            matrixLevel = level;
+            document.getElementById('tab-l1').classList.toggle('active', level === 'l1');
+            document.getElementById('tab-l2').classList.toggle('active', level === 'l2');
+            document.getElementById('matrix-hint').textContent = level === 'l1' 
+                ? '设置科室间吸引力 (0-5)' 
+                : '设置具体功能点之间的微观连接 (0-5)';
+            renderMatrix();
+        };
+
+        function renderMatrix() {
+            const el = document.getElementById('matrix-editor');
+            el.innerHTML = '';
+            
+            let items = [];
+            let getRelFn, setRelFn;
+
+            if (matrixLevel === 'l1') {
+                items = blocks;
+                getRelFn = (a,b) => getRelation(a.userData.id, b.userData.id);
+                setRelFn = (a,b,v) => setRelation(a.userData.id, b.userData.id, v);
+            } else {
+                // Flatten L2 Nodes
+                blocks.forEach(b => {
+                    b.userData.subNodes.forEach(sn => {
+                        items.push({ 
+                            userData: { 
+                                id: sn.id, 
+                                name: sn.id.replace(b.userData.id+'_', ''), // Show short name
+                                parentName: b.userData.name
+                            } 
+                        });
+                    });
+                });
+                getRelFn = (a,b) => getL2Relation(a.userData.id, b.userData.id);
+                setRelFn = (a,b,v) => setL2Relation(a.userData.id, b.userData.id, v);
+            }
+
+            const count = items.length;
+            if (count === 0) {
+                el.innerHTML = '<div class="text-xs text-center w-full py-4 opacity-50">暂无数据</div>';
+                return;
+            }
+
+            const cellSize = 24;
+            const labelColWidth = 80;
+            
+            el.style.gridTemplateColumns = `${labelColWidth}px repeat(${count}, ${cellSize}px)`;
+            
+            // Generate Rows
+            items.forEach((b1, i) => {
+                // Row Label
+                const label = document.createElement('div');
+                label.className = 'matrix-row-label';
+                label.innerText = b1.userData.name;
+                if(matrixLevel === 'l2') label.title = b1.userData.parentName + ' > ' + b1.userData.name;
+                el.appendChild(label);
+
+                // Cells
+                items.forEach((b2, j) => {
+                    const cell = document.createElement('div');
+                    
+                    if(i === j) {
+                        cell.className = 'matrix-cell-diagonal';
+                        cell.innerText = '·';
+                    } else if (j > i) {
+                        cell.className = 'matrix-cell-hidden';
+                    } else {
+                        const val = getRelFn(b1, b2);
+                        cell.className = `matrix-cell val-${val}`;
+                        cell.innerText = val > 0 ? val : '';
+                        cell.title = `${b1.userData.name} <-> ${b2.userData.name}`;
+                        cell.onclick = () => {
+                            const n = (val + 1) % 6;
+                            setRelFn(b1, b2, n);
+                            renderMatrix();
+                            updateSystem();
+                        };
+                    }
+                    el.appendChild(cell);
+                });
+            });
+
+            // Generate Footer Header
+            el.appendChild(document.createElement('div'));
+            items.forEach(b => {
+                const d = document.createElement('div');
+                d.className = 'matrix-header';
+                d.innerText = b.userData.name.substring(0,6);
+                el.appendChild(d);
+            });
+        }
+
+        // --- L2 (Sub-unit) Logic ---
+        
+        window.addL2Unit = () => {
+            if(selectedBlocks.length !== 1) return;
+            const b = selectedBlocks[0];
+            const count = b.userData.subNodes.length + 1;
+            const newId = `${b.userData.id}_u${count}`;
+            // Random pos within parent
+            const rx = (Math.random()-0.5) * (b.scale.x * 0.8);
+            const rz = (Math.random()-0.5) * (b.scale.z * 0.8);
+            
+            b.userData.subNodes.push({
+                id: newId,
+                x: rx, y: 0, z: rz // Local coords relative to parent center
+            });
+            updateSystem();
+            fillPropertyPanel(b); // Refresh UI list
+            if (matrixLevel === 'l2') renderMatrix();
+        };
+
+        window.deleteL2Unit = (idx) => {
+            if(selectedBlocks.length !== 1) return;
+            const b = selectedBlocks[0];
+            const sn = b.userData.subNodes[idx];
+            // Remove connections
+            Object.keys(l2Matrix).forEach(k => { if(k.includes(sn.id)) delete l2Matrix[k]; });
+            b.userData.subNodes.splice(idx, 1);
+            updateSystem();
+            fillPropertyPanel(b);
+            if (matrixLevel === 'l2') renderMatrix();
+        };
+
+        function updateL2Visuals() {
+            // Clean up old L2 meshes
+            l2Meshes.forEach(m => scene.remove(m));
+            l2Lines.forEach(l => scene.remove(l));
+            l2Meshes = [];
+            l2Lines = [];
+            
+            const worldPositions = {}; // id -> Vector3
+
+            // 1. Draw SubNodes (Cubes)
+            blocks.forEach(b => {
+                b.userData.subNodes.forEach(sn => {
+                    const geo = new THREE.BoxGeometry(2, 2, 2);
+                    const mat = new THREE.MeshBasicMaterial({ color: 0xf97316, depthTest: false });
+                    const mesh = new THREE.Mesh(geo, mat);
+                    
+                    // Transform local to world
+                    const worldPos = new THREE.Vector3(sn.x, sn.y, sn.z);
+                    worldPos.applyEuler(b.rotation);
+                    worldPos.add(b.position);
+                    
+                    mesh.position.copy(worldPos);
+                    mesh.renderOrder = 999; // Always on top
+                    scene.add(mesh);
+                    l2Meshes.push(mesh);
+                    worldPositions[sn.id] = worldPos;
+                });
+            });
+
+            // 2. Draw L2 Connections
+            Object.keys(l2Matrix).forEach(key => {
+                const strength = l2Matrix[key];
+                if(strength <= 0) return;
+                const [id1, id2] = key.split('-');
+                const p1 = worldPositions[id1];
+                const p2 = worldPositions[id2];
+                
+                if(p1 && p2) {
+                    const geo = new THREE.BufferGeometry().setFromPoints([p1, p2]);
+                    const mat = new THREE.LineBasicMaterial({ 
+                        color: 0xf97316, 
+                        transparent: true, 
+                        opacity: 0.8,
+                        linewidth: 2 
+                    });
+                    const line = new THREE.Line(geo, mat);
+                    scene.add(line);
+                    l2Lines.push(line);
+                }
+            });
+        }
+
+        function fillPropertyPanel(mesh) {
+            document.getElementById('selection-panel').style.display = 'block';
+            document.getElementById('no-selection').style.display = 'none';
+            document.getElementById('multi-selection-panel').style.display = 'none';
+            
+            const d = mesh.userData;
+            document.getElementById('prop-name').value = d.name;
+            document.getElementById('prop-color').value = d.color;
+            document.getElementById('prop-beds').value = d.beds || 0;
+            document.getElementById('prop-w').value = mesh.scale.x;
+            document.getElementById('prop-h').value = mesh.scale.y;
+            document.getElementById('prop-d').value = mesh.scale.z;
+            document.getElementById('prop-y').value = mesh.position.y;
+            document.getElementById('prop-area-input').value = (mesh.scale.x * mesh.scale.z).toFixed(0);
+            
+            // L2 Units List
+            const l2List = document.getElementById('l2-units-list');
+            l2List.innerHTML = '';
+            d.subNodes.forEach((sn, idx) => {
+                const tag = document.createElement('div');
+                tag.className = 'bg-orange-500/20 text-orange-400 border border-orange-500/50 rounded px-2 py-1 text-[10px] flex items-center gap-2';
+                tag.innerHTML = `<span>${sn.id.split('_').pop()}</span> <i class="fas fa-times cursor-pointer hover:text-white" onclick="deleteL2Unit(${idx})"></i>`;
+                l2List.appendChild(tag);
+            });
+            
+            updatePropStats(mesh);
+        }
+
+        // --- Physics Logic ---
+        
+        // Mode 0: Off
+        // Mode 1: L1 Only (Block to Block)
+        // Mode 2: L2 (Particle Physics + Parent Drag)
+        
+        window.setPhysicsMode = (mode) => {
+            physicsMode = mode;
+            [0,1,2].forEach(m => document.getElementById(`btn-phy-${m}`).classList.toggle('active', m === mode));
+        };
+
+        function applyPhysics() {
+            if(physicsMode === 0 || isDragging) return;
+
+            // 1. Block Repulsion (Prevent Overlap) - Applies to Mode 1 & 2
+            blocks.forEach(b1 => {
+                let force = new THREE.Vector3(0,0,0);
+                
+                // Keep near center
+                if(b1.position.length() > 200) force.add(b1.position.clone().negate().multiplyScalar(0.01));
+
+                blocks.forEach(b2 => {
+                    if(b1 === b2) return;
+                    const dist = b1.position.distanceTo(b2.position);
+                    const minDist = (Math.max(b1.scale.x, b1.scale.z) + Math.max(b2.scale.x, b2.scale.z)) / 1.8;
+                    const dy = Math.abs(b1.position.y - b2.position.y);
+                    
+                    // Collision repulse
+                    if(dist < minDist && dy < (b1.scale.y+b2.scale.y)/2) {
+                        const diff = new THREE.Vector3().subVectors(b1.position, b2.position);
+                        force.add(diff.normalize().multiplyScalar((minDist - dist) * 0.2));
+                    }
+                });
+                
+                b1.position.add(force);
+            });
+
+            // 2. L1 Attraction (Mode 1 Only)
+            if (physicsMode === 1) {
+                connections.forEach(c => {
+                   if (c.strength > 0) {
+                       const diff = new THREE.Vector3().subVectors(c.b2.position, c.b1.position);
+                       const dist = diff.length();
+                       const target = 50 - (c.strength * 5); // Stronger = closer
+                       if (dist > target) {
+                           const pull = diff.normalize().multiplyScalar((dist - target) * 0.005 * c.strength);
+                           c.b1.position.add(pull);
+                           c.b2.position.sub(pull);
+                       }
+                   } 
+                });
+            }
+
+            // 3. L2 Physics (Mode 2 Only)
+            if (physicsMode === 2) {
+                // Map L2 nodes to world positions for calculation
+                const l2World = {};
+                blocks.forEach(b => {
+                    b.userData.subNodes.forEach(sn => {
+                        const wp = new THREE.Vector3(sn.x, sn.y, sn.z).add(b.position);
+                        l2World[sn.id] = { pos: wp, parent: b, local: sn };
+                    });
+                });
+
+                Object.keys(l2Matrix).forEach(k => {
+                    const str = l2Matrix[k];
+                    if (str <= 0) return;
+                    const [id1, id2] = k.split('-');
+                    const n1 = l2World[id1];
+                    const n2 = l2World[id2];
+
+                    if (n1 && n2) {
+                        const diff = new THREE.Vector3().subVectors(n2.pos, n1.pos);
+                        const dist = diff.length();
+                        const targetDist = 10; // L2 wants to be very close
+                        
+                        if (dist > targetDist) {
+                            const forceMag = (dist - targetDist) * 0.01 * str;
+                            const force = diff.normalize().multiplyScalar(forceMag);
+                            
+                            // A. Move Particles Locally (Internal Optimization)
+                            // Constrain to parent box size roughly
+                            const limitX = n1.parent.scale.x / 2;
+                            const limitZ = n1.parent.scale.z / 2;
+                            
+                            n1.local.x = THREE.MathUtils.clamp(n1.local.x + force.x, -limitX, limitX);
+                            n1.local.z = THREE.MathUtils.clamp(n1.local.z + force.z, -limitZ, limitZ);
+                            
+                            n2.local.x = THREE.MathUtils.clamp(n2.local.x - force.x, -n2.parent.scale.x/2, n2.parent.scale.x/2);
+                            n2.local.z = THREE.MathUtils.clamp(n2.local.z - force.z, -n2.parent.scale.z/2, n2.parent.scale.z/2);
+
+                            // B. Drag Parent Blocks (Global Optimization)
+                            const parentDragFactor = 0.2; 
+                            n1.parent.position.add(force.multiplyScalar(parentDragFactor));
+                            n2.parent.position.sub(force.multiplyScalar(parentDragFactor));
+                        }
+                    }
+                });
+            }
+            
+            updateConnections();
+        }
+
+        // --- Standard Logic from previous version ---
+        
+        window.toggleLabels = () => {
+            showDistanceLabels = !showDistanceLabels;
+            document.getElementById('btn-labels').classList.toggle('active', showDistanceLabels);
+            connections.forEach(c => { if (c.label) c.label.style.display = showDistanceLabels ? 'block' : 'none'; });
+        };
+
+        function updateConnections() {
+            connections.forEach(c => { scene.remove(c.line); c.label.remove(); });
+            connections = [];
+            const labelLayer = document.getElementById('labels-layer');
+
+            for(let i=0; i<blocks.length; i++) {
+                for(let j=i+1; j<blocks.length; j++) {
+                    const b1 = blocks[i]; const b2 = blocks[j];
+                    const strength = getRelation(b1.userData.id, b2.userData.id);
+                    
+                    if(strength > 0) {
+                        const p1 = b1.position; const p2 = b2.position;
+                        const pts = [new THREE.Vector3(p1.x, p1.y, p1.z), new THREE.Vector3(p2.x, p1.y, p1.z), new THREE.Vector3(p2.x, p1.y, p2.z), new THREE.Vector3(p2.x, p2.y, p2.z)];
+                        const geo = new THREE.BufferGeometry().setFromPoints(pts);
+                        const color = strength >= 4 ? 0xef4444 : (strength >= 2 ? 0x3b82f6 : 0x94a3b8);
+                        const mat = new THREE.LineBasicMaterial({ color: color, opacity: strength/5, transparent: true });
+                        const line = new THREE.Line(geo, mat);
+                        scene.add(line);
+
+                        const distH = Math.abs(p1.x - p2.x) + Math.abs(p1.z - p2.z);
+                        const distV = Math.abs(p1.y - p2.y);
+                        const distTotal = distH + distV;
+
+                        const div = document.createElement('div');
+                        div.className = 'dist-label';
+                        div.innerText = distTotal.toFixed(0) + "m";
+                        div.style.color = strength >= 4 ? '#ef4444' : (currentTheme === 'light' ? '#334155' : '#e2e8f0');
+                        div.style.display = showDistanceLabels ? 'block' : 'none';
+                        labelLayer.appendChild(div);
+
+                        connections.push({ line, label: div, b1, b2, strength, distH, distV, distTotal, mid: new THREE.Vector3().lerpVectors(p1, p2, 0.5) });
+                    }
+                }
+            }
+        }
+
+        function analyzeMetrics() {
+            // Basic FRI calculation
+            let totalWeightedDist = 0;
+            let blackRooms = 0;
+            let totalVol = 0, totalSurf = 0;
+            
+            connections.forEach(c => { totalWeightedDist += c.distTotal * c.strength; });
+            const fri = connections.length ? (totalWeightedDist / (connections.length * 50)) : 0;
+            
+            blocks.forEach(b => {
+                const w = b.scale.x, h = b.scale.y, d = b.scale.z;
+                totalVol += w*h*d;
+                totalSurf += 2*(w*h+h*d+w*d);
+                
+                // Simple overlap check for daylight
+                let covered = 0;
+                blocks.forEach(o => {
+                   if(b===o) return;
+                   const dx = Math.abs(b.position.x - o.position.x);
+                   const dz = Math.abs(b.position.z - o.position.z);
+                   if (dx < (b.scale.x+o.scale.x)/2 && dz < (b.scale.z+o.scale.z)/2) covered++;
+                });
+                b.userData.isLandlocked = covered >= 3;
+                if(b.userData.isLandlocked) blackRooms++;
+            });
+
+            const compactness = totalVol > 0 ? (totalSurf/totalVol) : 0;
+            
+            updateKPI('kpi-flow', fri.toFixed(2), fri > 1.5 ? 'bad' : 'good');
+            updateKPI('kpi-vh', (fri*0.4).toFixed(2), 'good'); // Dummy calculation
+            updateKPI('kpi-light', blackRooms, blackRooms > 0 ? 'bad' : 'good');
+        }
+
+        function updateKPI(id, val, status) {
+            const el = document.getElementById(id);
+            el.querySelector('.kpi-value').innerText = val;
+            el.className = `kpi-card ${status}`;
+        }
+
+        // --- Interaction & Events (Selection, etc) ---
+        
+        container.addEventListener('mousedown', onMouseDown);
+        container.addEventListener('mousemove', onMouseMove);
+        window.addEventListener('mouseup', onMouseUp);
+
+        function onMouseDown(e) {
+            if(e.button !== 0) return;
+            
+            const rect = container.getBoundingClientRect();
+            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(blocks);
+            
+            if(intersects.length > 0) {
+                controls.enabled = false; // Disable orbit controls
+                isDragging = true;
+                draggedObject = intersects[0].object;
+                
+                // Calculate drag offset
+                const intersectPoint = intersects[0].point;
+                dragOffset.copy(draggedObject.position).sub(intersectPoint);
+                
+                // Select if not selected
+                if(!selectedBlocks.includes(draggedObject)) {
+                    handleSelection([draggedObject]);
+                }
+                
+                // Set drag plane height
+                dragPlane.constant = -intersectPoint.y; 
+            } else {
+                handleSelection([]);
+            }
+        }
+
+        function onMouseMove(e) {
+            if(!isDragging || !draggedObject) return;
+            
+            const rect = container.getBoundingClientRect();
+            mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const intersectPoint = new THREE.Vector3();
+            raycaster.ray.intersectPlane(dragPlane, intersectPoint);
+            
+            if(intersectPoint) {
+                const newPos = intersectPoint.add(dragOffset);
+                // Simple Lock Y for now (or snapping logic if needed)
+                draggedObject.position.set(newPos.x, draggedObject.position.y, newPos.z);
+                
+                updateConnections();
+                // Labels update automatically in animate loop
+            }
+        }
+
+        function onMouseUp() {
+            if(isDragging) {
+                isDragging = false;
+                draggedObject = null;
+                controls.enabled = true;
+                updateSystem(); 
+                saveState();
+            }
+        }
+
+        function handleSelection(selection) {
+            selectedBlocks = selection;
+            transformControl.detach();
+            if(selectedBlocks.length === 1) {
+                transformControl.attach(selectedBlocks[0]);
+                fillPropertyPanel(selectedBlocks[0]);
+            } else {
+                document.getElementById('selection-panel').style.display = 'none';
+                document.getElementById('no-selection').style.display = 'block';
+            }
+        }
+        
+        window.deleteSelection = () => {
+             if(selectedBlocks.length === 0) return;
+             saveState();
+             transformControl.detach();
+             selectedBlocks.forEach(b => {
+                 scene.remove(b);
+                 if(b.userData.labelEl) b.userData.labelEl.remove();
+                 blocks = blocks.filter(x => x !== b);
+                 // Clean up L1 matrix
+                 Object.keys(matrix).forEach(k => { if(k.includes(b.userData.id)) delete matrix[k]; });
+                 // Clean up L2 matrix (subnodes)
+                 b.userData.subNodes.forEach(sn => {
+                    Object.keys(l2Matrix).forEach(k => { if(k.includes(sn.id)) delete l2Matrix[k]; });
+                 });
+             });
+             selectedBlocks = [];
+             handleSelection([]);
+             updateSystem();
+             renderMatrix();
+        };
+
+        function updatePropStats(mesh) {
+            const vol = mesh.scale.x * mesh.scale.y * mesh.scale.z;
+            const area = mesh.scale.x * mesh.scale.z;
+            document.getElementById('prop-area').innerText = area.toFixed(0);
+            document.getElementById('prop-vol').innerText = vol.toFixed(0);
+        }
+
+        // Prop inputs listeners
+        ['prop-name','prop-beds'].forEach(id => {
+            document.getElementById(id).addEventListener('input', e => {
+                if(selectedBlocks.length !== 1) return;
+                selectedBlocks[0].userData[id.replace('prop-','')] = e.target.value;
+                updateLabels();
+            });
+        });
+        ['prop-w','prop-h','prop-d'].forEach(id => {
+            document.getElementById(id).addEventListener('input', e => {
+                if(selectedBlocks.length !== 1) return;
+                const axis = id.slice(-1) === 'w' ? 'x' : (id.slice(-1) === 'h' ? 'y' : 'z');
+                selectedBlocks[0].scale[axis] = parseFloat(e.target.value) || 1;
+                updateSystem();
+                updatePropStats(selectedBlocks[0]);
+            });
+        });
+        document.getElementById('prop-color').addEventListener('input', e => {
+            if(selectedBlocks.length !== 1) return;
+            selectedBlocks[0].userData.color = e.target.value;
+            selectedBlocks[0].material.color.set(e.target.value);
+            updateLabels();
+        });
+        
+        function updateLabels() {
+            const layer = document.getElementById('labels-layer');
+            const old = layer.querySelectorAll('.dept-label');
+            old.forEach(o => o.remove());
+            
+            // Re-create labels logic remains for data updates
+            // Position updates moved to animate loop for performance
+            blocks.forEach(b => {
+                const el = document.createElement('div');
+                el.className = 'dept-label';
+                const area = (b.scale.x * b.scale.z).toFixed(0);
+                el.innerHTML = `<div class="dept-name" style="border-left:3px solid ${b.userData.color}">${b.userData.name}<span class="dept-area">${area}m²</span></div>`;
+                if(b.userData.isLandlocked) el.innerHTML += `<div class="dept-issue">采光差</div>`;
+                b.userData.labelEl = el;
+                layer.appendChild(el);
+            });
+        }
+
+        window.focusBlock = (id) => {
+            const b = blocks.find(x => x.userData.id === id);
+            if(b) handleSelection([b]);
+        };
+
+        window.updateSliceHeight = (v) => { 
+            sliceY = parseFloat(v); 
+            document.getElementById('slice-display').textContent = isSliceMode ? `Layer ${Math.floor(sliceY/4)+1}` : "ALL"; 
+            updateSliceView(); 
+        };
+        window.toggleSliceMode = () => { isSliceMode = !isSliceMode; updateSliceView(); };
+        function updateSliceView() {
+            blocks.forEach(m => {
+                if(!isSliceMode) { m.material.opacity = 0.9; return; }
+                const b = m.position.y - m.scale.y/2;
+                const t = m.position.y + m.scale.y/2;
+                m.material.opacity = (sliceY >= b && sliceY <= t) ? 0.9 : 0.1;
+            });
+        }
+        
+        // --- Standard View Helpers ---
+        window.setView = (mode) => {
+            const size = 300;
+            const end = new THREE.Vector3();
+            if(mode === 'top') end.set(0, size, 0);
+            if(mode === 'south') end.set(0, 0, size);
+            if(mode === 'north') end.set(0, 0, -size);
+            if(mode === 'east') end.set(size, 0, 0);
+            if(mode === 'west') end.set(-size, 0, 0);
+            camera.position.copy(end);
+            camera.lookAt(0,0,0);
+            camera.updateProjectionMatrix();
+        };
+        window.resetView = () => {
+            camera.position.set(200, 200, 200);
+            camera.lookAt(0,0,0);
+            camera.zoom = 1;
+            camera.updateProjectionMatrix();
+        };
+        window.zoomIn = () => { camera.zoom = Math.min(camera.zoom + 0.1, 5); camera.updateProjectionMatrix(); };
+        window.zoomOut = () => { camera.zoom = Math.max(camera.zoom - 0.1, 0.1); camera.updateProjectionMatrix(); };
+        
+        function onResize() {
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+            const aspect = w / h;
+            const size = 300;
+            camera.left = -size * aspect / 2;
+            camera.right = size * aspect / 2;
+            camera.top = size / 2;
+            camera.bottom = -size / 2;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w, h);
+        }
+
+        // --- Basic Utils ---
+        window.toggleSidebar = (side) => {
+            document.getElementById(`sidebar-${side}`).classList.toggle(`collapsed-${side}`);
+            const icon = document.getElementById(`icon-${side}`);
+            icon.style.transform = icon.style.transform === 'rotate(180deg)' ? 'rotate(0deg)' : 'rotate(180deg)';
+        };
+        window.switchTab = (id) => {
+            document.querySelectorAll('.view-section').forEach(e=>e.classList.remove('active'));
+            document.querySelectorAll('.nav-tab').forEach(e=>e.classList.remove('active'));
+            document.getElementById(`view-${id}`).classList.add('active');
+            document.querySelector(`[onclick="switchTab('${id}')"]`).classList.add('active');
+            if(id === '3d') onResize();
+        };
+        function saveState() {
+             const state = {
+                blocks: blocks.map(b => ({ userData: b.userData, pos: b.position.clone(), scale: b.scale.clone() })),
+                matrix: { ...matrix },
+                l2Matrix: { ...l2Matrix }
+             };
+             historyStack.push(JSON.stringify(state));
+             if(historyStack.length > 20) historyStack.shift();
+        }
+        window.addNewDept = () => {
+             saveState();
+             const id = 'new_' + Date.now();
+             const b = createBlock({ id, name: '新科室', color: '#ec4899', w: 20, h: 5, d: 20, x: 0, y: 10, z: 0, beds: 0, subNodes: [] });
+             updateSystem();
+             renderMatrix();
+             handleSelection([b]);
+        };
+        function updateDiagnostics() {
+            const list = document.getElementById('diagnostics-list');
+            list.innerHTML = '';
+            const addDiag = (msg, level='info') => {
+                const div = document.createElement('div');
+                div.className = `diag-item ${level}`;
+                div.innerHTML = `<i class="fas fa-${level==='warn'?'exclamation-circle':'info-circle'}"></i> <span>${msg}</span>`;
+                list.appendChild(div);
+            };
+            if(blocks.some(b => b.userData.isLandlocked)) addDiag('部分房间采光不足 (黑房间)', 'warn');
+            if(Object.values(l2Matrix).some(v => v > 4)) addDiag('检测到高优先级 L2 连接', 'info');
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            applyPhysics();
+            
+            // Sync Labels Position in Animation Loop
+            if(blocks.length > 0) {
+                const rect = container.getBoundingClientRect();
+                
+                // Department Labels
+                blocks.forEach(b => {
+                    if (b.userData.labelEl) {
+                        const tempV = b.position.clone();
+                        tempV.y += b.scale.y / 2 + 2; 
+                        tempV.project(camera);
+                        
+                        // Hide if outside or behind
+                        if(tempV.z > 1 || Math.abs(tempV.x)>1 || Math.abs(tempV.y)>1) {
+                            b.userData.labelEl.style.display = 'none';
+                        } else {
+                            b.userData.labelEl.style.display = 'flex';
+                            const x = (tempV.x * .5 + .5) * rect.width;
+                            const y = (-tempV.y * .5 + .5) * rect.height;
+                            b.userData.labelEl.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
+                        }
+                    }
+                });
+
+                // Distance Labels
+                connections.forEach(c => {
+                    if (c.label) {
+                        const tempV = c.mid.clone().project(camera);
+                        if(tempV.z > 1 || Math.abs(tempV.x)>1 || Math.abs(tempV.y)>1) {
+                            c.label.style.display = 'none';
+                        } else {
+                            c.label.style.display = showDistanceLabels ? 'block' : 'none';
+                            const x = (tempV.x * .5 + .5) * rect.width;
+                            const y = (-tempV.y * .5 + .5) * rect.height;
+                            c.label.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
+                        }
+                    }
+                });
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        window.openAIModal = () => document.getElementById('ai-modal').style.display = 'flex';
+        window.closeAIModal = () => document.getElementById('ai-modal').style.display = 'none';
+
+        init();
+    </script>
+</body>
+</html>
