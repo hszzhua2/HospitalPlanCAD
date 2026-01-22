@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>医院空间效能规划系统 V2.1 (Full Feature Restoration)</title>
+    <title>医院空间效能规划系统 V3.2 (Gumball Fix)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -66,7 +66,6 @@
         
         /* Layout & Nav */
         #app-container { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
-        /* Added position:relative to ensure z-index works, and flex-shrink:0 to prevent collapse */
         #main-nav { height: 56px; background: var(--bg-panel); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; z-index: 2000; backdrop-filter: blur(10px); transition: background 0.3s; position: relative; flex-shrink: 0; }
         .nav-brand { font-weight: 700; font-size: 18px; color: #0ea5e9; display: flex; align-items: center; gap: 8px; }
         .nav-tabs { display: flex; gap: 4px; background: var(--border-faint); padding: 4px; border-radius: 8px; border: 1px solid var(--border-color); }
@@ -359,7 +358,7 @@
 <body>
 
     <nav id="main-nav">
-        <div class="nav-brand"><i class="fas fa-hospital-symbol"></i> MC-SPACE V2.1</div>
+        <div class="nav-brand"><i class="fas fa-hospital-symbol"></i> MC-SPACE V3.2 (Gumball Fix)</div>
         <div class="nav-tabs">
             <div class="nav-tab active" onclick="switchTab('3d')"><i class="fas fa-cube"></i> 3D 规划</div>
             <div class="nav-tab" onclick="switchTab('report')"><i class="fas fa-chart-pie"></i> 效能报告</div>
@@ -497,18 +496,28 @@
                             </div>
                         </div>
                         
+                        <!-- Shape Edit Toggle -->
+                        <div class="bg-white/5 rounded p-2 mb-3 border border-white/10">
+                            <div class="flex justify-between items-center">
+                                <label class="text-[10px] font-bold text-green-400">几何形状</label>
+                                <button class="btn btn-ghost px-2 py-1 text-[10px]" id="btn-edit-shape" onclick="toggleShapeEdit()">
+                                    <i class="fas fa-draw-polygon"></i> 编辑形状
+                                </button>
+                            </div>
+                        </div>
+
                         <!-- L2 Management -->
                         <div class="bg-white/5 rounded p-2 mb-3 border border-white/10">
                             <div class="flex justify-between items-center mb-2">
                                 <label class="text-[10px] font-bold text-blue-400">二级功能点 (L2)</label>
-                                <button class="btn btn-orange px-2 py-1 text-[10px]" onclick="addL2Unit()"><i class="fas fa-plus"></i> 添加功能点</button>
+                                <button class="btn btn-orange px-2 py-1 text-[10px]" onclick="addL2Unit()"><i class="fas fa-plus"></i> 添加</button>
                             </div>
                             <div id="l2-units-list" class="flex flex-wrap gap-1"></div>
                         </div>
 
                         <div class="form-group">
                             <label class="form-label">面积 (m²)</label>
-                            <input type="number" id="prop-area-input" class="form-input" placeholder="输入面积自动计算尺寸">
+                            <input type="number" id="prop-area-input" class="form-input" placeholder="输入面积自动计算尺寸" disabled title="形状编辑模式下自动计算">
                         </div>
                         <div class="grid grid-cols-3 gap-2">
                             <div class="form-group"><label class="form-label">宽(X)</label><input type="number" id="prop-w" class="form-input"></div>
@@ -643,8 +652,9 @@
         ];
 
         let blocks = [], connections = [], coreMeshes = [], corridorMeshes = [], l2Meshes = [], l2Lines = [];
-        let matrix = {}; // L1 Matrix
-        let l2Matrix = {}; // L2 Matrix: 'id1-id2': strength
+        let shapeHandles = []; // For Edit Mode
+        let matrix = {}; 
+        let l2Matrix = {}; 
         let selectedBlocks = [];
         let clipboard = [];
         let historyStack = [];
@@ -652,23 +662,23 @@
         
         let isDaylightMode = false;
         let showDistanceLabels = true; 
-        let physicsMode = 0; // 0:Off, 1:L1 (2D), 2:L2 (Particle)
-        let matrixLevel = 'l1'; // 'l1' or 'l2'
+        let physicsMode = 0; 
+        let matrixLevel = 'l1'; 
         let isSliceMode = false;
         let sliceY = 0;
         let currentTheme = 'dark';
+        let isShapeEditMode = false;
         
         let areaChart, flowChart;
-        let windowAnalysisData = {}; // Global store for report
+        let windowAnalysisData = {}; 
 
-        // Generative Design State
         let generativeDesignRunning = false;
         let candidateSolutions = [];
         let currentIteration = 0;
         let maxIterations = 100;
         let bestSolutions = [];
 
-        // Interaction Variables (Custom Drag)
+        // Interaction Variables
         let isDragging = false;
         let isSelecting = false;
         let draggedObject = null;
@@ -698,8 +708,19 @@
         const transformControl = new TransformControls(camera, renderer.domElement);
         transformControl.addEventListener('dragging-changed', e => { 
             controls.enabled = !e.value; 
-            if(e.value) saveState();
-            if(!e.value) updateSystem(); 
+            if(e.value) {
+                // Drag start
+            } else {
+                // Drag end
+                saveState();
+                updateSystem();
+            }
+        });
+        // 监听 Gumball 的变化，实时更新连接线和标签
+        transformControl.addEventListener('change', () => {
+            if(transformControl.object) {
+                updateSystem(); // 实时更新连接线、L2结构等
+            }
         });
         scene.add(transformControl);
 
@@ -722,8 +743,6 @@
             setRelation('surg', 'img', 3);
 
             initialDepts.forEach(createBlock);
-            
-            // Set initial L2 relations
             setL2Relation('er_resus', 'img_ct', 5);
 
             updateSystem();
@@ -757,20 +776,46 @@
             if(document.getElementById('view-report').classList.contains('active')) generateReport();
         };
 
+        // --- Extrusion Logic ---
+        function generateExtrudedGeometry(points, height) {
+            const shape = new THREE.Shape();
+            shape.moveTo(points[0].x, points[0].y);
+            for(let i=1; i<points.length; i++) shape.lineTo(points[i].x, points[i].y);
+            shape.lineTo(points[0].x, points[0].y);
+
+            const geometry = new THREE.ExtrudeGeometry(shape, { depth: height, bevelEnabled: false });
+            // Center the geometry so (0,0) is center of block, extruded along Y
+            geometry.translate(0, 0, -height/2); 
+            geometry.rotateX(-Math.PI / 2); 
+            return geometry;
+        }
+
         function createBlock(data) {
-            const geo = new THREE.BoxGeometry(1, 1, 1);
+            // Default rectangular shape if no points provided
+            if(!data.points) {
+                const hw = data.w/2;
+                const hd = data.d/2;
+                data.points = [
+                    {x: -hw, y: -hd},
+                    {x: hw, y: -hd},
+                    {x: hw, y: hd},
+                    {x: -hw, y: hd}
+                ];
+            }
+
+            const geometry = generateExtrudedGeometry(data.points, data.h);
             const mat = new THREE.MeshStandardMaterial({ 
                 color: data.color, roughness: 0.4, metalness: 0.1, transparent: true, opacity: 0.9 
             });
-            const mesh = new THREE.Mesh(geo, mat);
+            const mesh = new THREE.Mesh(geometry, mat);
             mesh.position.set(data.x, data.y, data.z);
-            mesh.scale.set(data.w, data.h, data.d);
+            // NOTE: We don't scale ExtrudeGeometry like BoxGeometry. Scale should be 1,1,1
+            // Scale logic is now handled by regenerating geometry.
+            mesh.scale.set(1, 1, 1); 
             mesh.castShadow = true;
             mesh.receiveShadow = true;
             
             if (!data.subNodes) data.subNodes = [];
-            
-            // Assign default category if missing
             if (!data.cat) data.cat = 'admin';
 
             mesh.userData = { ...data, originalColor: data.color };
@@ -779,7 +824,15 @@
             return mesh;
         }
 
-        // L1 Matrix Helpers
+        function updateBlockGeometry(block) {
+            // Dispose old
+            block.geometry.dispose();
+            // Generate new based on userData
+            const newGeo = generateExtrudedGeometry(block.userData.points, block.userData.h);
+            block.geometry = newGeo;
+        }
+
+        // --- L1/L2 Matrix Helpers ---
         function setRelation(id1, id2, str) {
             if(id1 === id2) return;
             const k = id1 < id2 ? `${id1}_${id2}` : `${id2}_${id1}`;
@@ -789,8 +842,6 @@
             const k = id1 < id2 ? `${id1}_${id2}` : `${id2}_${id1}`;
             return matrix[k] || 0;
         }
-
-        // L2 Matrix Helpers
         function setL2Relation(id1, id2, str) {
             if(id1 === id2) return;
             const k = id1 < id2 ? `${id1}-${id2}` : `${id2}-${id1}`;
@@ -804,12 +855,13 @@
         function updateSystem() {
             updateConnections();
             updateL2Visuals();
-            updateAutoStructures(); // Restored
+            updateAutoStructures();
             analyzeMetrics();
             updateLabels();
             updateDiagnostics();
             if(isDaylightMode) runDaylightAnalysis();
             updateSliceView();
+            if(isShapeEditMode) updateShapeHandles();
         }
 
         function updateConnections() {
@@ -848,58 +900,41 @@
             }
         }
 
-        // --- Auto Structures (Restored) ---
         function updateAutoStructures() {
-            // Clean up old
             coreMeshes.forEach(m => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); });
             corridorMeshes.forEach(m => { scene.remove(m); m.geometry.dispose(); m.material.dispose(); });
             coreMeshes = []; corridorMeshes = [];
             totalPublicArea = 0;
 
-            // Only show if not in pure physics drag mode to save perfs
             if(isDragging) return;
 
             const hSegs = [];
-            
-            // 1. Identify shafts based on vertical connections
             const rawShafts = [];
             connections.forEach(c => {
-                if (c.strength > 0 && c.distV > 4) { // Only vertical connections > 4m
+                if (c.strength > 0 && c.distV > 4) { 
                     const p1 = c.b1.position;
                     const p2 = c.b2.position;
-                    
-                    // Simple shaft placement logic at midpoint XZ
                     const shaftX = (p1.x + p2.x) / 2;
                     const shaftZ = (p1.z + p2.z) / 2;
                     const minY = Math.min(p1.y, p2.y);
                     const maxY = Math.max(p1.y, p2.y);
-                    
                     rawShafts.push({ x: shaftX, z: shaftZ, minY, maxY, strength: c.strength });
                 }
                 
-                // Collect horizontal segments for corridors
-                // Simply connect block centers if on same floor range
                 if (Math.abs(c.b1.position.y - c.b2.position.y) < 2) {
-                    const y = c.b1.position.y - c.b1.scale.y/2 + 1; // Floor level
+                    const y = c.b1.position.y - c.b1.userData.h/2 + 1; 
                     const p1 = c.b1.position; const p2 = c.b2.position;
-                    // X-segment
-                    if (Math.abs(p1.x - p2.x) > 1) {
-                        hSegs.push({ axis: 'x', y: y, z: p1.z, min: Math.min(p1.x, p2.x), max: Math.max(p1.x, p2.x) });
-                    }
-                    // Z-segment (from p2.x)
-                    if (Math.abs(p1.z - p2.z) > 1) {
-                        hSegs.push({ axis: 'z', y: y, x: p2.x, min: Math.min(p1.z, p2.z), max: Math.max(p1.z, p2.z) });
-                    }
+                    if (Math.abs(p1.x - p2.x) > 1) hSegs.push({ axis: 'x', y: y, z: p1.z, min: Math.min(p1.x, p2.x), max: Math.max(p1.x, p2.x) });
+                    if (Math.abs(p1.z - p2.z) > 1) hSegs.push({ axis: 'z', y: y, x: p2.x, min: Math.min(p1.z, p2.z), max: Math.max(p1.z, p2.z) });
                 }
             });
 
-            // 2. Merge shafts (Clustering)
             const mergedShafts = [];
             rawShafts.forEach(raw => {
                 let merged = false;
                 for(let bank of mergedShafts) {
                     const dist = Math.sqrt((raw.x - bank.x)**2 + (raw.z - bank.z)**2);
-                    if (dist < 15) { // Merge radius
+                    if (dist < 15) { 
                         bank.x = (bank.x + raw.x) / 2;
                         bank.z = (bank.z + raw.z) / 2;
                         bank.minY = Math.min(bank.minY, raw.minY);
@@ -912,7 +947,6 @@
                 if (!merged) mergedShafts.push(raw);
             });
 
-            // 3. Render Cores
             mergedShafts.forEach(bank => {
                 const height = bank.maxY - bank.minY + 4;
                 const width = bank.strength > 3 ? 6 : 4;
@@ -923,10 +957,9 @@
                 mesh.position.set(bank.x, (bank.minY + bank.maxY)/2, bank.z);
                 scene.add(mesh);
                 coreMeshes.push(mesh);
-                totalPublicArea += width * depth * (height / 4); // Approx floors
+                totalPublicArea += width * depth * (height / 4); 
             });
 
-            // 4. Render Corridors (Simplified)
             hSegs.forEach(s => {
                 const len = s.max - s.min;
                 if(len < 2) return;
@@ -942,41 +975,81 @@
             });
         }
 
-        // --- Interaction Logic (Fixed: Box Select vs Drag) ---
+        // --- Interaction Logic ---
         
         container.addEventListener('mousedown', onMouseDown);
         container.addEventListener('mousemove', onMouseMove);
         window.addEventListener('mouseup', onMouseUp);
-        // [修复] 阻止浏览器默认右键菜单，防止干扰旋转操作和UI显示
         container.addEventListener('contextmenu', (e) => e.preventDefault());
 
         function onMouseDown(e) {
             if(e.button !== 0) return;
             
+            // [修复] 如果正悬停在 Gumball (变换控制器) 上，不要执行选择/取消选择逻辑
+            // TransformControls 的 axis 属性在鼠标悬停在轴上时会有值 (如 'X', 'Y', 'XY' 等)，否则为 null
+            if (transformControl.axis) return;
+
             const rect = container.getBoundingClientRect();
             mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
             mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
             
             raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObjects(blocks);
             
-            if(intersects.length > 0) {
-                // Clicked on object -> Drag
-                isDragging = true;
-                isSelecting = false;
-                controls.enabled = false;
-                draggedObject = intersects[0].object;
-                
-                const intersectPoint = intersects[0].point;
-                dragOffset.copy(draggedObject.position).sub(intersectPoint);
-                dragStartPos.copy(draggedObject.position);
-                dragPlane.constant = -intersectPoint.y; 
-                
-                if(!selectedBlocks.includes(draggedObject)) {
-                    handleSelection([draggedObject]);
+            // 1. Check for Shape Handles first (Custom Drag for Vertex Editing)
+            if(isShapeEditMode && shapeHandles.length > 0) {
+                const intersectsH = raycaster.intersectObjects(shapeHandles);
+                if(intersectsH.length > 0) {
+                    
+                    // [ADD VERTEX LOGIC]
+                    if (intersectsH[0].object.userData.isGhost) {
+                        const ghost = intersectsH[0].object;
+                        const block = ghost.userData.parentBlock;
+                        const idx = ghost.userData.index;
+                        
+                        // Insert new point at midpoint
+                        const p1 = block.userData.points[idx];
+                        const p2 = block.userData.points[(idx+1)%block.userData.points.length];
+                        const newPt = { x: (p1.x+p2.x)/2, y: (p1.y+p2.y)/2 };
+
+                        block.userData.points.splice(idx + 1, 0, newPt);
+                        updateBlockGeometry(block);
+                        createShapeHandles(block); // Refresh to make new real handle
+
+                        // Find the new real handle to drag immediately
+                        const newHandle = shapeHandles.find(h => !h.userData.isGhost && h.userData.index === idx + 1);
+                        
+                        controls.enabled = false;
+                        isDragging = true;
+                        draggedObject = newHandle;
+                        const ip = intersectsH[0].point;
+                        dragPlane.constant = -ip.y;
+                        return;
+                    }
+
+                    controls.enabled = false;
+                    isDragging = true;
+                    draggedObject = intersectsH[0].object; // A normal handle
+                    const ip = intersectsH[0].point;
+                    dragPlane.constant = -ip.y;
+                    return;
                 }
+            }
+
+            // 2. Check Blocks (Select Only - Gumball handles drag)
+            const intersects = raycaster.intersectObjects(blocks);
+            if(intersects.length > 0) {
+                const clickedObject = intersects[0].object;
+                
+                // 如果点击了当前未选中的体块，则选中它并显示 Gumball
+                // 如果已经选中了该体块，不做任何操作（让 Gumball 自己处理点击事件，或者允许 OrbitControls 工作）
+                if(!selectedBlocks.includes(clickedObject)) {
+                    handleSelection([clickedObject]);
+                }
+                
+                // 注意：这里不再设置 isDragging = true，也不禁用 controls
+                // 这样 Gumball (TransformControls) 才能接收到事件并处理轴向拖拽
             } else {
-                // Clicked on background -> Box Select
+                // 3. Background click -> Box Select
                 isDragging = false;
                 isSelecting = true;
                 startSelectionCoords = { x: e.clientX, y: e.clientY };
@@ -985,11 +1058,15 @@
                 selectionBox.style.top = e.clientY + 'px';
                 selectionBox.style.width = '0px';
                 selectionBox.style.height = '0px';
+                
+                // 点击空白处取消选择
+                handleSelection([]);
             }
         }
 
         function onMouseMove(e) {
-            if (isDragging && draggedObject) {
+            // Only handle custom dragging for Shape Handles (Vertices)
+            if (isDragging && draggedObject && draggedObject.userData.isHandle) {
                 const rect = container.getBoundingClientRect();
                 mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
                 mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
@@ -999,21 +1076,31 @@
                 raycaster.ray.intersectPlane(dragPlane, intersectPoint);
                 
                 if(intersectPoint) {
-                    const newPos = intersectPoint.add(dragOffset);
-                    let targetX = newPos.x;
-                    let targetZ = newPos.z;
-
+                    const handle = draggedObject;
+                    const block = selectedBlocks[0]; 
+                    // Move handle on XZ plane relative to block center
+                    const localPos = intersectPoint.clone().sub(block.position);
+                    
                     if (e.shiftKey) {
-                        const dx = Math.abs(targetX - dragStartPos.x);
-                        const dz = Math.abs(targetZ - dragStartPos.z);
-                        if (dx > dz) targetZ = dragStartPos.z; 
-                        else targetX = dragStartPos.x;
+                        // Simple axis snap for vertices if needed, or free move
+                        if(Math.abs(localPos.x) < 2) localPos.x = 0;
+                        if(Math.abs(localPos.z) < 2) localPos.z = 0;
                     }
 
-                    draggedObject.position.set(targetX, draggedObject.position.y, targetZ);
-                    updateSystem(); // Realtime update
+                    handle.position.copy(intersectPoint); 
+                    
+                    // Update point
+                    const ptIndex = handle.userData.index;
+                    block.userData.points[ptIndex].x = localPos.x;
+                    block.userData.points[ptIndex].y = localPos.z; 
+                    
+                    updateBlockGeometry(block);
+                    return;
                 }
-            } else if (isSelecting) {
+            } 
+            
+            // Box Select Visual Update
+            if (isSelecting) {
                 const left = Math.min(startSelectionCoords.x, e.clientX);
                 const top = Math.min(startSelectionCoords.y, e.clientY);
                 const width = Math.abs(e.clientX - startSelectionCoords.x);
@@ -1028,50 +1115,118 @@
 
         function onMouseUp(e) {
             if(isDragging) {
+                // Shape handle drag end
                 isDragging = false;
                 draggedObject = null;
                 controls.enabled = true;
+                if(isShapeEditMode) updateShapeHandles(); 
                 saveState();
             } else if (isSelecting) {
+                // Box select end
                 isSelecting = false;
                 selectionBox.style.display = 'none';
                 
-                // Calculate selection
                 const rect = container.getBoundingClientRect();
                 const left = Math.min(startSelectionCoords.x, e.clientX);
                 const top = Math.min(startSelectionCoords.y, e.clientY);
                 const width = Math.abs(e.clientX - startSelectionCoords.x);
                 const height = Math.abs(e.clientY - startSelectionCoords.y);
                 
-                // If it was just a click (tiny box), deselect
-                if (width < 5 && height < 5) {
-                    handleSelection([]);
-                    return;
-                }
-
-                const newSelection = [];
-                blocks.forEach(b => {
-                    const v = b.position.clone().project(camera);
-                    const x = (v.x * 0.5 + 0.5) * rect.width + rect.left;
-                    const y = (-(v.y) * 0.5 + 0.5) * rect.height + rect.top;
-                    if(x >= left && x <= left + width && y >= top && y <= top + height) {
-                        newSelection.push(b);
+                if (width > 5 || height > 5) {
+                    const newSelection = [];
+                    blocks.forEach(b => {
+                        const v = b.position.clone().project(camera);
+                        const x = (v.x * 0.5 + 0.5) * rect.width + rect.left;
+                        const y = (-(v.y) * 0.5 + 0.5) * rect.height + rect.top;
+                        if(x >= left && x <= left + width && y >= top && y <= top + height) {
+                            newSelection.push(b);
+                        }
+                    });
+                    
+                    if (e.ctrlKey) {
+                        handleSelection([...selectedBlocks, ...newSelection]);
+                    } else {
+                        handleSelection(newSelection);
                     }
-                });
-                
-                // Handle Ctrl for multi-select
-                if (e.ctrlKey) {
-                    handleSelection([...selectedBlocks, ...newSelection]);
-                } else {
-                    handleSelection(newSelection);
                 }
             }
+        }
+
+        // --- Shape Editor ---
+        window.toggleShapeEdit = () => {
+            if (selectedBlocks.length !== 1) {
+                alert("请选择一个体块进行编辑");
+                return;
+            }
+            isShapeEditMode = !isShapeEditMode;
+            const btn = document.getElementById('btn-edit-shape');
+            if (isShapeEditMode) {
+                btn.classList.add('bg-green-500', 'text-white');
+                createShapeHandles(selectedBlocks[0]);
+            } else {
+                btn.classList.remove('bg-green-500', 'text-white');
+                clearShapeHandles();
+            }
+        };
+
+        function createShapeHandles(block) {
+            clearShapeHandles();
+            const points = block.userData.points;
+            
+            // 1. Vertex Handles (White)
+            points.forEach((pt, i) => {
+                const geo = new THREE.SphereGeometry(1, 16, 16);
+                const mat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+                const handle = new THREE.Mesh(geo, mat);
+                const worldPos = new THREE.Vector3(pt.x, 0, pt.y).applyEuler(block.rotation).add(block.position);
+                worldPos.y = block.position.y + block.userData.h/2 + 0.5;
+                handle.position.copy(worldPos);
+                handle.userData = { isHandle: true, index: i, parentBlock: block };
+                scene.add(handle);
+                shapeHandles.push(handle);
+            });
+
+            // 2. Midpoint Ghost Handles (Gray, for adding points)
+            for (let i = 0; i < points.length; i++) {
+                const nextI = (i + 1) % points.length;
+                const pt = points[i];
+                const nextPt = points[nextI];
+                const midX = (pt.x + nextPt.x) / 2;
+                const midY = (pt.y + nextPt.y) / 2;
+
+                const geo = new THREE.SphereGeometry(0.6, 16, 16);
+                const mat = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.8 });
+                const ghost = new THREE.Mesh(geo, mat);
+
+                const worldPos = new THREE.Vector3(midX, 0, midY).applyEuler(block.rotation).add(block.position);
+                worldPos.y = block.position.y + block.userData.h/2 + 0.5;
+
+                ghost.position.copy(worldPos);
+                ghost.userData = { isHandle: true, isGhost: true, index: i, parentBlock: block };
+                scene.add(ghost);
+                shapeHandles.push(ghost);
+            }
+        }
+
+        function updateShapeHandles() {
+            if (selectedBlocks.length !== 1) {
+                if(isShapeEditMode) window.toggleShapeEdit(); 
+                return;
+            }
+            const block = selectedBlocks[0];
+            // Since point count might change, just recreate
+            createShapeHandles(block);
+        }
+
+        function clearShapeHandles() {
+            shapeHandles.forEach(h => scene.remove(h));
+            shapeHandles = [];
         }
 
         // --- Export Data (Restored & Updated) ---
         window.exportData = () => {
             const data = {
-                version: "2.1",
+                version: "3.0",
                 timestamp: new Date().toISOString(),
                 blocks: blocks.map(b => ({
                     id: b.userData.id,
@@ -1080,30 +1235,46 @@
                     color: b.userData.color,
                     beds: b.userData.beds,
                     pos: { x: b.position.x, y: b.position.y, z: b.position.z },
-                    scale: { w: b.scale.x, h: b.scale.y, d: b.scale.z },
+                    // w/d are kept for reference, but points define shape
+                    scale: { w: b.userData.w, h: b.userData.h, d: b.userData.d }, 
+                    points: b.userData.points,
                     subNodes: b.userData.subNodes
                 })),
                 l1Matrix: matrix,
                 l2Matrix: l2Matrix,
                 metrics: windowAnalysisData
             };
-            
             const blob = new Blob([JSON.stringify(data, null, 2)], {type : 'application/json'});
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `hospital_plan_v2.1_${Date.now()}.json`;
+            a.download = `hospital_plan_v3.0_${Date.now()}.json`;
             a.click();
         };
 
         // --- Report Generation (Restored) ---
         function generateReport() {
-            // Calculate areas
             const catAreas = { 'public': totalPublicArea };
             let totalArea = totalPublicArea;
             let totalBeds = 0;
 
             blocks.forEach(b => {
-                const area = b.scale.x * b.scale.z;
+                // Approximate area for custom shapes using simple polygon area
+                // Or just box for fallback
+                let area = 0;
+                if (b.userData.points) {
+                    // Shoelace formula
+                    const pts = b.userData.points;
+                    let areaSum = 0;
+                    for (let i = 0; i < pts.length; i++) {
+                        const j = (i + 1) % pts.length;
+                        areaSum += pts[i].x * pts[j].y;
+                        areaSum -= pts[i].y * pts[j].x;
+                    }
+                    area = Math.abs(areaSum) / 2;
+                } else {
+                    area = b.userData.w * b.userData.d;
+                }
+                
                 const cat = b.userData.cat || 'admin';
                 if(!catAreas[cat]) catAreas[cat] = 0;
                 catAreas[cat] += area;
@@ -1229,22 +1400,13 @@
             }
             currentIteration++;
             
-            // Mutation Logic
-            const bestBase = bestSolutions.length > 0 ? bestSolutions[0] : null;
-            
-            // Create a conceptual layout (don't move meshes yet)
-            // Just simulate changing positions
             let newLayout = blocks.map(b => ({ id: b.userData.id, pos: b.position.clone() }));
             
-            // Apply random mutation
             const idx = Math.floor(Math.random() * newLayout.length);
             const target = newLayout[idx];
             target.pos.x += (Math.random()-0.5) * 20;
             target.pos.z += (Math.random()-0.5) * 20;
             
-            // Score it (Simulated)
-            // In a real app we'd need a separate physics world. Here we just approximate score
-            // by checking distances against matrix preferences.
             let score = 0;
             let distPenalty = 0;
             
@@ -1259,13 +1421,12 @@
                     }
                 }
             }
-            score = 10000 - distPenalty; // Higher is better
+            score = 10000 - distPenalty;
 
             bestSolutions.push({ layout: newLayout, score: score });
             bestSolutions.sort((a,b) => b.score - a.score);
             if(bestSolutions.length > 5) bestSolutions.pop();
 
-            // Update UI
             document.getElementById('gen-iter').innerText = currentIteration;
             document.getElementById('gen-bar').style.width = (currentIteration/maxIterations*100) + '%';
             document.getElementById('gen-best').innerText = '最佳分数: ' + bestSolutions[0].score.toFixed(0);
@@ -1380,8 +1541,8 @@
             const b = selectedBlocks[0];
             const count = b.userData.subNodes.length + 1;
             const newId = `${b.userData.id}_u${count}`;
-            const rx = (Math.random()-0.5) * (b.scale.x * 0.8);
-            const rz = (Math.random()-0.5) * (b.scale.z * 0.8);
+            const rx = (Math.random()-0.5) * (b.userData.w * 0.8);
+            const rz = (Math.random()-0.5) * (b.userData.d * 0.8);
             b.userData.subNodes.push({ id: newId, x: rx, y: 0, z: rz });
             updateSystem();
             fillPropertyPanel(b);
@@ -1407,7 +1568,9 @@
 
             blocks.forEach(b => {
                 b.userData.subNodes.forEach(sn => {
-                    const geo = new THREE.BoxGeometry(2, 2, 2);
+                    // Also use Extrusion for L2 particles for consistency, though simple Box is usually fine
+                    // For performance on small items, box geometry is efficient.
+                    const geo = new THREE.BoxGeometry(2, 2, 2); 
                     const mat = new THREE.MeshBasicMaterial({ color: 0xf97316, depthTest: false });
                     const mesh = new THREE.Mesh(geo, mat);
                     const worldPos = new THREE.Vector3(sn.x, sn.y, sn.z).applyEuler(b.rotation).add(b.position);
@@ -1443,11 +1606,25 @@
             document.getElementById('prop-name').value = d.name;
             document.getElementById('prop-color').value = d.color;
             document.getElementById('prop-beds').value = d.beds || 0;
-            document.getElementById('prop-w').value = mesh.scale.x;
-            document.getElementById('prop-h').value = mesh.scale.y;
-            document.getElementById('prop-d').value = mesh.scale.z;
+            document.getElementById('prop-w').value = d.w;
+            document.getElementById('prop-h').value = d.h;
+            document.getElementById('prop-d').value = d.d;
             document.getElementById('prop-y').value = mesh.position.y;
-            document.getElementById('prop-area-input').value = (mesh.scale.x * mesh.scale.z).toFixed(0);
+            
+            // Calculate Area based on shape points
+            let area = 0;
+            if (d.points) {
+                let areaSum = 0;
+                for (let i = 0; i < d.points.length; i++) {
+                    const j = (i + 1) % d.points.length;
+                    areaSum += d.points[i].x * d.points[j].y;
+                    areaSum -= d.points[i].y * d.points[j].x;
+                }
+                area = Math.abs(areaSum) / 2;
+            } else {
+                area = d.w * d.d;
+            }
+            document.getElementById('prop-area-input').value = area.toFixed(0);
             
             const l2List = document.getElementById('l2-units-list');
             l2List.innerHTML = '';
@@ -1458,6 +1635,11 @@
                 l2List.appendChild(tag);
             });
             updatePropStats(mesh);
+            
+            // Handle Shape Edit Toggle State
+            if(isShapeEditMode) {
+                createShapeHandles(mesh);
+            }
         }
 
         window.setPhysicsMode = (mode) => {
@@ -1474,9 +1656,9 @@
                 blocks.forEach(b2 => {
                     if(b1 === b2) return;
                     const dist = b1.position.distanceTo(b2.position);
-                    const minDist = (Math.max(b1.scale.x, b1.scale.z) + Math.max(b2.scale.x, b2.scale.z)) / 1.8;
+                    const minDist = (Math.max(b1.userData.w, b1.userData.d) + Math.max(b2.userData.w, b2.userData.d)) / 1.8;
                     const dy = Math.abs(b1.position.y - b2.position.y);
-                    if(dist < minDist && dy < (b1.scale.y+b2.scale.y)/2) {
+                    if(dist < minDist && dy < (b1.userData.h+b2.userData.h)/2) {
                         const diff = new THREE.Vector3().subVectors(b1.position, b2.position);
                         force.add(diff.normalize().multiplyScalar((minDist - dist) * 0.2));
                     }
@@ -1520,12 +1702,14 @@
                         if (dist > targetDist) {
                             const forceMag = (dist - targetDist) * 0.01 * str;
                             const force = diff.normalize().multiplyScalar(forceMag);
-                            const limitX = n1.parent.scale.x / 2;
-                            const limitZ = n1.parent.scale.z / 2;
+                            // Constrain logic needs update for custom shape logic if strict
+                            // Using simple bbox for now
+                            const limitX = n1.parent.userData.w / 2;
+                            const limitZ = n1.parent.userData.d / 2;
                             n1.local.x = THREE.MathUtils.clamp(n1.local.x + force.x, -limitX, limitX);
                             n1.local.z = THREE.MathUtils.clamp(n1.local.z + force.z, -limitZ, limitZ);
-                            n2.local.x = THREE.MathUtils.clamp(n2.local.x - force.x, -n2.parent.scale.x/2, n2.parent.scale.x/2);
-                            n2.local.z = THREE.MathUtils.clamp(n2.local.z - force.z, -n2.parent.scale.z/2, n2.parent.scale.z/2);
+                            n2.local.x = THREE.MathUtils.clamp(n2.local.x - force.x, -n2.parent.userData.w/2, n2.parent.userData.w/2);
+                            n2.local.z = THREE.MathUtils.clamp(n2.local.z - force.z, -n2.parent.userData.d/2, n2.parent.userData.d/2);
                             const parentDragFactor = 0.2; 
                             n1.parent.position.add(force.multiplyScalar(parentDragFactor));
                             n2.parent.position.sub(force.multiplyScalar(parentDragFactor));
@@ -1573,7 +1757,7 @@
             connections.forEach(c => { totalWeightedDist += c.distTotal * c.strength; });
             const fri = connections.length ? (totalWeightedDist / (connections.length * 50)) : 0;
             blocks.forEach(b => {
-                const w = b.scale.x, h = b.scale.y, d = b.scale.z;
+                const w = b.userData.w, h = b.userData.h, d = b.userData.d;
                 totalVol += w*h*d;
                 totalSurf += 2*(w*h+h*d+w*d);
                 let covered = 0;
@@ -1581,7 +1765,7 @@
                    if(b===o) return;
                    const dx = Math.abs(b.position.x - o.position.x);
                    const dz = Math.abs(b.position.z - o.position.z);
-                   if (dx < (b.scale.x+o.scale.x)/2 && dz < (b.scale.z+o.scale.z)/2) covered++;
+                   if (dx < (b.userData.w+o.userData.w)/2 && dz < (b.userData.d+o.userData.d)/2) covered++;
                 });
                 b.userData.isLandlocked = covered >= 3;
                 if(b.userData.isLandlocked) blackRooms++;
@@ -1605,11 +1789,23 @@
         function handleSelection(selection) {
             selectedBlocks = selection;
             transformControl.detach();
+            
+            // Exit shape mode if deselecting
+            if(isShapeEditMode && (selection.length !== 1 || selection[0] !== shapeHandles[0]?.userData.parentBlock)) {
+                window.toggleShapeEdit();
+            }
+
             if(selectedBlocks.length === 1) {
-                transformControl.attach(selectedBlocks[0]);
                 fillPropertyPanel(selectedBlocks[0]);
+                transformControl.attach(selectedBlocks[0]); // Attach Gumball
+            } else if (selectedBlocks.length > 1) {
+                document.getElementById('selection-panel').style.display = 'none';
+                document.getElementById('no-selection').style.display = 'none';
+                document.getElementById('multi-selection-panel').style.display = 'block';
+                document.getElementById('multi-count').innerText = selectedBlocks.length;
             } else {
                 document.getElementById('selection-panel').style.display = 'none';
+                document.getElementById('multi-selection-panel').style.display = 'none';
                 document.getElementById('no-selection').style.display = 'block';
             }
         }
@@ -1634,10 +1830,12 @@
         };
 
         function updatePropStats(mesh) {
-            const vol = mesh.scale.x * mesh.scale.y * mesh.scale.z;
-            const area = mesh.scale.x * mesh.scale.z;
-            document.getElementById('prop-area').innerText = area.toFixed(0);
-            document.getElementById('prop-vol').innerText = vol.toFixed(0);
+            const areaInput = document.getElementById('prop-area-input');
+            if(areaInput.value) {
+                const area = parseFloat(areaInput.value);
+                document.getElementById('prop-area').innerText = area.toFixed(0);
+                document.getElementById('prop-vol').innerText = (area * mesh.userData.h).toFixed(0);
+            }
         }
 
         ['prop-name','prop-beds'].forEach(id => {
@@ -1647,15 +1845,41 @@
                 updateLabels();
             });
         });
-        ['prop-w','prop-h','prop-d'].forEach(id => {
+        
+        // Handle W/H/D inputs - now they scale points
+        ['prop-w','prop-d'].forEach(id => {
             document.getElementById(id).addEventListener('input', e => {
                 if(selectedBlocks.length !== 1) return;
-                const axis = id.slice(-1) === 'w' ? 'x' : (id.slice(-1) === 'h' ? 'y' : 'z');
-                selectedBlocks[0].scale[axis] = parseFloat(e.target.value) || 1;
+                const b = selectedBlocks[0];
+                const dim = id.replace('prop-',''); // w or d
+                const val = parseFloat(e.target.value) || 1;
+                
+                // Scale factor logic
+                const oldVal = b.userData[dim];
+                const ratio = val / oldVal;
+                
+                // Update Points
+                b.userData.points.forEach(p => {
+                    if (dim === 'w') p.x *= ratio;
+                    if (dim === 'd') p.y *= ratio;
+                });
+                
+                b.userData[dim] = val;
+                
+                updateBlockGeometry(b);
                 updateSystem();
-                updatePropStats(selectedBlocks[0]);
+                fillPropertyPanel(b); // Update area calc
             });
         });
+        
+        document.getElementById('prop-h').addEventListener('input', e => {
+            if(selectedBlocks.length !== 1) return;
+            selectedBlocks[0].userData.h = parseFloat(e.target.value) || 1;
+            updateBlockGeometry(selectedBlocks[0]);
+            updateSystem();
+            updatePropStats(selectedBlocks[0]);
+        });
+
         document.getElementById('prop-color').addEventListener('input', e => {
             if(selectedBlocks.length !== 1) return;
             selectedBlocks[0].userData.color = e.target.value;
@@ -1670,8 +1894,17 @@
             blocks.forEach(b => {
                 const el = document.createElement('div');
                 el.className = 'dept-label';
-                const area = (b.scale.x * b.scale.z).toFixed(0);
-                el.innerHTML = `<div class="dept-name" style="border-left:3px solid ${b.userData.color}">${b.userData.name}<span class="dept-area">${area}m²</span></div>`;
+                // Estimate area for label
+                let area = b.userData.w * b.userData.d; 
+                if (b.userData.points) {
+                     // Recalc area for display
+                     let s = 0;
+                     const p = b.userData.points;
+                     for(let i=0;i<p.length;i++) { s += p[i].x*p[(i+1)%p.length].y - p[i].y*p[(i+1)%p.length].x; }
+                     area = Math.abs(s)/2;
+                }
+                
+                el.innerHTML = `<div class="dept-name" style="border-left:3px solid ${b.userData.color}">${b.userData.name}<span class="dept-area">${area.toFixed(0)}m²</span></div>`;
                 if(b.userData.isLandlocked) el.innerHTML += `<div class="dept-issue">采光差</div>`;
                 b.userData.labelEl = el;
                 layer.appendChild(el);
@@ -1698,8 +1931,8 @@
         function updateSliceView() {
             blocks.forEach(m => {
                 if(!isSliceMode) { m.material.opacity = 0.9; return; }
-                const b = m.position.y - m.scale.y/2;
-                const t = m.position.y + m.scale.y/2;
+                const b = m.position.y - m.userData.h/2;
+                const t = m.position.y + m.userData.h/2;
                 m.material.opacity = (sliceY >= b && sliceY <= t) ? 0.9 : 0.1;
             });
         }
@@ -1753,7 +1986,10 @@
         };
         function saveState() {
              const state = {
-                blocks: blocks.map(b => ({ userData: b.userData, pos: b.position.clone(), scale: b.scale.clone() })),
+                blocks: blocks.map(b => ({ 
+                    userData: JSON.parse(JSON.stringify(b.userData)), // Deep copy points
+                    pos: b.position.clone()
+                })),
                 matrix: { ...matrix },
                 l2Matrix: { ...l2Matrix }
              };
@@ -1792,7 +2028,7 @@
                 blocks.forEach(b => {
                     if (b.userData.labelEl) {
                         const tempV = b.position.clone();
-                        tempV.y += b.scale.y / 2 + 2; 
+                        tempV.y += b.userData.h / 2 + 2; 
                         tempV.project(camera);
                         
                         if(tempV.z > 1 || Math.abs(tempV.x)>1 || Math.abs(tempV.y)>1) {
