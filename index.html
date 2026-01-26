@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>医院空间效能规划系统 V3.3 (L2 Properties)</title>
+    <title>医院空间效能规划系统 V4.0 (Space Syntax Integrated)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -65,7 +65,7 @@
         body { margin: 0; overflow: hidden; font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-app); color: var(--text-main); transition: background-color 0.3s, color 0.3s; }
         
         /* Layout & Nav */
-        #app-container { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+        #app-container { width: 100vw; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         #main-nav { height: 56px; background: var(--bg-panel); border-bottom: 1px solid var(--border-color); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; z-index: 2000; backdrop-filter: blur(10px); transition: background 0.3s; position: relative; flex-shrink: 0; }
         .nav-brand { font-weight: 700; font-size: 18px; color: #0ea5e9; display: flex; align-items: center; gap: 8px; }
         .nav-tabs { display: flex; gap: 4px; background: var(--border-faint); padding: 4px; border-radius: 8px; border: 1px solid var(--border-color); }
@@ -345,6 +345,10 @@
         .status-ok { background: rgba(16, 185, 129, 0.2); color: #10b981; }
         .status-warn { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
         .status-bad { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+
+        /* Syntax Badge */
+        .syntax-badge { font-size:9px; padding:1px 4px; border-radius:3px; background:#475569; color:white; }
+        .syntax-val { font-family: monospace; font-weight: bold; }
     </style>
     <script type="importmap">
         {
@@ -357,22 +361,22 @@
 </head>
 <body>
 
-    <nav id="main-nav">
-        <div class="nav-brand"><i class="fas fa-hospital-symbol"></i> MC-SPACE V3.3 (L2 Properties)</div>
-        <div class="nav-tabs">
-            <div class="nav-tab active" onclick="switchTab('3d')"><i class="fas fa-cube"></i> 3D 规划</div>
-            <div class="nav-tab" onclick="switchTab('report')"><i class="fas fa-chart-pie"></i> 效能报告</div>
-        </div>
-        <div class="flex gap-2">
-            <button class="btn btn-ghost" onclick="toggleTheme()" title="切换主题"><i class="fas fa-moon" id="theme-icon"></i></button>
-            <div style="width:1px; background:var(--border-color); margin:0 4px;"></div>
-            <button class="btn btn-ai" onclick="openAIModal()"><i class="fas fa-magic"></i> AI Architect</button>
-            <button class="btn btn-secondary" onclick="exportData()"><i class="fas fa-download"></i> 导出</button>
-            <button class="btn btn-primary" onclick="startGenerativeDesign()"><i class="fas fa-dice"></i> 生成式设计</button>
-        </div>
-    </nav>
-
     <div id="app-container">
+        <nav id="main-nav">
+            <div class="nav-brand"><i class="fas fa-hospital-symbol"></i> IPPR-MC-SPACE V4.0 (Syntax Integrated)</div>
+            <div class="nav-tabs">
+                <div class="nav-tab active" onclick="switchTab('3d')"><i class="fas fa-cube"></i> 3D 规划</div>
+                <div class="nav-tab" onclick="switchTab('report')"><i class="fas fa-chart-pie"></i> 效能报告</div>
+            </div>
+            <div class="flex gap-2">
+                <button class="btn btn-ghost" onclick="toggleTheme()" title="切换主题"><i class="fas fa-moon" id="theme-icon"></i></button>
+                <div style="width:1px; background:var(--border-color); margin:0 4px;"></div>
+                <button class="btn btn-ai" onclick="openAIModal()"><i class="fas fa-magic"></i> AI Architect</button>
+                <button class="btn btn-secondary" onclick="exportData()"><i class="fas fa-download"></i> 导出</button>
+                <button class="btn btn-primary" onclick="startGenerativeDesign()"><i class="fas fa-dice"></i> 生成式设计</button>
+            </div>
+        </nav>
+
         <!-- 3D VIEW -->
         <div id="view-3d" class="view-section active">
             <div id="canvas-container" tabindex="0"></div>
@@ -388,6 +392,7 @@
                 <div class="v-btn" onclick="resetView()">重置</div>
                 <div style="width:1px; height:20px; background:var(--border-color); margin:0 4px;"></div>
                 <div class="v-btn-icon" id="btn-daylight" onclick="toggleDaylightMode()" title="采光热力图"><i class="fas fa-sun"></i></div>
+                <div class="v-btn-icon" id="btn-syntax" onclick="toggleSyntaxMode()" title="空间句法热力图 (Integration/Choice)"><i class="fas fa-network-wired"></i></div>
                 <div class="v-btn-icon active" id="btn-labels" onclick="toggleLabels()" title="距离标注"><i class="fas fa-ruler-combined"></i></div>
                 
                 <div style="display:flex; align-items:center; background:var(--border-faint); border-radius:14px; padding:2px; border:1px solid var(--border-color);">
@@ -495,6 +500,12 @@
                                 <input type="number" id="prop-beds" class="form-input">
                             </div>
                         </div>
+
+                        <!-- Fixed Toggle -->
+                        <div class="flex items-center gap-2 mb-3 bg-white/5 p-2 rounded border border-white/10">
+                            <input type="checkbox" id="prop-fixed" class="w-4 h-4 accent-blue-500 cursor-pointer">
+                            <label for="prop-fixed" class="text-[10px] text-white cursor-pointer select-none font-bold">锁定位置 (固定)</label>
+                        </div>
                         
                         <!-- Shape Edit Toggle -->
                         <div class="bg-white/5 rounded p-2 mb-3 border border-white/10">
@@ -504,6 +515,29 @@
                                     <i class="fas fa-draw-polygon"></i> 编辑形状
                                 </button>
                             </div>
+                        </div>
+
+                        <!-- Space Syntax Stats (NEW) -->
+                        <div class="bg-white/5 rounded p-2 mb-3 border border-white/10">
+                             <div class="text-[10px] font-bold text-purple-400 mb-2">空间句法指标 (Space Syntax)</div>
+                             <div class="grid grid-cols-2 gap-2 text-[10px]">
+                                 <div class="flex justify-between">
+                                     <span class="text-gray-400" title="集成度/可达性: 反映全局中心性">集成度:</span>
+                                     <span id="syn-int" class="syntax-val text-white">0.0</span>
+                                 </div>
+                                 <div class="flex justify-between">
+                                     <span class="text-gray-400" title="穿行度/选择度: 反映作为交通枢纽的潜力">穿行度:</span>
+                                     <span id="syn-ch" class="syntax-val text-white">0.0</span>
+                                 </div>
+                                 <div class="flex justify-between">
+                                     <span class="text-gray-400" title="连接值: 直接相连的空间数">连接值:</span>
+                                     <span id="syn-con" class="syntax-val text-white">0</span>
+                                 </div>
+                                 <div class="flex justify-between">
+                                     <span class="text-gray-400" title="控制值: 对相邻空间的控制力">控制值:</span>
+                                     <span id="syn-ctr" class="syntax-val text-white">0.0</span>
+                                 </div>
+                             </div>
                         </div>
 
                         <!-- L2 Management -->
@@ -661,6 +695,9 @@
         let totalPublicArea = 0;
         
         let isDaylightMode = false;
+        // Space Syntax State
+        let syntaxMode = 'none'; // 'none', 'integration', 'choice'
+        
         let showDistanceLabels = true; 
         let physicsMode = 0; 
         let matrixLevel = 'l1'; 
@@ -817,6 +854,12 @@
             
             if (!data.subNodes) data.subNodes = [];
             if (!data.cat) data.cat = 'admin';
+            
+            // Initial fixed state
+            if (data.fixed === undefined) data.fixed = false;
+
+            // Space Syntax Data Holders
+            data.syntax = { integration: 0, choice: 0, connectivity: 0, control: 0 };
 
             mesh.userData = { ...data, originalColor: data.color };
             scene.add(mesh);
@@ -857,11 +900,140 @@
             updateL2Visuals();
             updateAutoStructures();
             analyzeMetrics();
+            
+            // --- Space Syntax Calculation ---
+            calculateSpaceSyntax();
+            
             updateLabels();
             updateDiagnostics();
             if(isDaylightMode) runDaylightAnalysis();
+            if(syntaxMode !== 'none') runSyntaxVisuals(); // Update visual if syntax mode active
             updateSliceView();
             if(isShapeEditMode) updateShapeHandles();
+        }
+
+        // --- Space Syntax Logic (NEW) ---
+        function calculateSpaceSyntax() {
+            const nodes = blocks.map(b => b.userData.id);
+            const n = nodes.length;
+            if (n < 2) return;
+
+            // 1. Build Adjacency Graph (Unweighted for topological steps)
+            // We define "Connection" as Matrix Relation > 0 OR Distance < Threshold
+            const adj = {};
+            nodes.forEach(id => adj[id] = []);
+
+            for(let i=0; i<blocks.length; i++) {
+                for(let j=i+1; j<blocks.length; j++) {
+                    const b1 = blocks[i];
+                    const b2 = blocks[j];
+                    const id1 = b1.userData.id;
+                    const id2 = b2.userData.id;
+                    
+                    // Functional link (Matrix)
+                    const rel = getRelation(id1, id2);
+                    
+                    // Spatial link (Distance < threshold, e.g., 20m + touching logic)
+                    // Simplified: if relation exists OR they are very close
+                    const dist = b1.position.distanceTo(b2.position);
+                    const spatialLink = dist < (Math.max(b1.userData.w, b1.userData.d) + Math.max(b2.userData.w, b2.userData.d)) * 0.6;
+
+                    if (rel > 0 || spatialLink) {
+                        adj[id1].push(id2);
+                        adj[id2].push(id1);
+                    }
+                }
+            }
+
+            // 2. Connectivity (Degree) & Control
+            const degrees = {};
+            blocks.forEach(b => {
+                const id = b.userData.id;
+                const k = adj[id].length;
+                degrees[id] = k;
+                b.userData.syntax.connectivity = k;
+            });
+
+            // Control Value: sum(1/degree(neighbor))
+            blocks.forEach(b => {
+                const id = b.userData.id;
+                let ctrl = 0;
+                adj[id].forEach(nbr => {
+                    if (degrees[nbr] > 0) ctrl += 1 / degrees[nbr];
+                });
+                b.userData.syntax.control = ctrl;
+            });
+
+            // 3. Integration (Global) & Choice (Betweenness)
+            // Shortest Path (BFS)
+            const choiceCounts = {}; // node -> count
+            nodes.forEach(id => choiceCounts[id] = 0);
+
+            blocks.forEach(startBlock => {
+                const s = startBlock.userData.id;
+                let totalDepth = 0;
+                
+                // BFS for Depth and Path Counting
+                const queue = [s];
+                const dist = {};
+                const prev = {}; // for path reconstruction
+                nodes.forEach(n => { dist[n] = Infinity; prev[n] = []; });
+                dist[s] = 0;
+
+                while(queue.length > 0) {
+                    const u = queue.shift();
+                    adj[u].forEach(v => {
+                        if (dist[v] === Infinity) {
+                            dist[v] = dist[u] + 1;
+                            prev[v] = [u];
+                            queue.push(v);
+                        } else if (dist[v] === dist[u] + 1) {
+                            prev[v].push(u);
+                        }
+                    });
+                }
+
+                // Sum Total Depth for Integration
+                let reachableCount = 0;
+                nodes.forEach(target => {
+                    if(target !== s && dist[target] !== Infinity) {
+                        totalDepth += dist[target];
+                        reachableCount++;
+                    }
+                });
+
+                // Calculate Mean Depth & Integration (HH)
+                // Integration = 1 / Mean Depth (Simplified)
+                // RRA (Real Relative Asymmetry) logic is complex, using simple 1/MD for visual
+                const md = reachableCount > 0 ? totalDepth / reachableCount : Infinity;
+                startBlock.userData.syntax.integration = md > 0 ? (1 / md) * 10 : 0; // Scale for readability
+
+                // Choice Calculation (Betweenness approximation based on geodesics)
+                // For every target t != s, backtrack to find paths
+                // This is a simplified "stress centrality"
+                nodes.forEach(t => {
+                    if (t === s || dist[t] === Infinity) return;
+                    let curr = t;
+                    // Simple backtrack one path (simplification for real-time)
+                    // Full Betweenness requires Brandes algorithm, computationally heavy for JS loop
+                    // We stick to simple path counting for now
+                    while (prev[curr] && prev[curr].length > 0) {
+                        curr = prev[curr][0]; // Take primary parent
+                        if (curr !== s) choiceCounts[curr]++;
+                    }
+                });
+            });
+
+            // Normalize Choice
+            const maxChoice = Math.max(...Object.values(choiceCounts), 1);
+            blocks.forEach(b => {
+                b.userData.syntax.choice = choiceCounts[b.userData.id];
+            });
+
+            // Refresh UI if selected
+            if (selectedBlocks.length === 1) {
+                fillSyntaxPanel(selectedBlocks[0]);
+            }
         }
 
         function updateConnections() {
@@ -1226,7 +1398,7 @@
         // --- Export Data (Restored & Updated) ---
         window.exportData = () => {
             const data = {
-                version: "3.0",
+                version: "4.0",
                 timestamp: new Date().toISOString(),
                 blocks: blocks.map(b => ({
                     id: b.userData.id,
@@ -1238,7 +1410,8 @@
                     // w/d are kept for reference, but points define shape
                     scale: { w: b.userData.w, h: b.userData.h, d: b.userData.d }, 
                     points: b.userData.points,
-                    subNodes: b.userData.subNodes
+                    subNodes: b.userData.subNodes,
+                    syntax: b.userData.syntax
                 })),
                 l1Matrix: matrix,
                 l2Matrix: l2Matrix,
@@ -1247,7 +1420,7 @@
             const blob = new Blob([JSON.stringify(data, null, 2)], {type : 'application/json'});
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
-            a.download = `hospital_plan_v3.0_${Date.now()}.json`;
+            a.download = `hospital_plan_v4.0_syntax_${Date.now()}.json`;
             a.click();
         };
 
@@ -1346,12 +1519,23 @@
             // 3. KPI Table
             const kpiBody = document.getElementById('report-table-body');
             const metrics = windowAnalysisData;
+            
+            // Find most integrated and most choice
+            let maxIntName = "-", maxChoiceName = "-";
+            let maxIntVal = 0, maxChoiceVal = 0;
+            blocks.forEach(b => {
+                if(b.userData.syntax.integration > maxIntVal) { maxIntVal = b.userData.syntax.integration; maxIntName = b.userData.name; }
+                if(b.userData.syntax.choice > maxChoiceVal) { maxChoiceVal = b.userData.syntax.choice; maxChoiceName = b.userData.name; }
+            });
+
             kpiBody.innerHTML = `
                 <tr class="report-cell"><td class="py-2 text-blue-400 font-bold">总建筑面积</td><td class="font-mono text-white">${totalArea.toFixed(0)} m²</td><td class="text-xs text-gray-500">-</td><td>-</td></tr>
                 <tr class="report-cell"><td class="py-2 text-blue-400 font-bold">总床位数</td><td class="font-mono text-white">${totalBeds}</td><td class="text-xs text-gray-500">-</td><td>-</td></tr>
                 <tr class="report-cell"><td class="py-2">单床建筑面积</td><td class="font-mono text-white">${totalBeds>0 ? (totalArea/totalBeds).toFixed(1) : 0} m²/bed</td><td class="text-xs text-gray-500">60-90</td><td>${totalBeds>0 ? ((totalArea/totalBeds)>60?'OK':'Low') : '-'}</td></tr>
                 <tr class="report-cell"><td class="py-2">流程阻力 (FRI)</td><td class="font-mono text-white">${metrics.fri}</td><td class="text-xs text-gray-500"><1.0</td><td>${metrics.fri<1.0?'<span class="status-badge status-ok">优</span>':'<span class="status-badge status-bad">需优化</span>'}</td></tr>
                 <tr class="report-cell"><td class="py-2">垂直效能 (VEC)</td><td class="font-mono text-white">${metrics.vhRatio}</td><td class="text-xs text-gray-500"><1.4</td><td>${metrics.vhRatio<1.4?'<span class="status-badge status-ok">优</span>':'<span class="status-badge status-warn">一般</span>'}</td></tr>
+                <tr class="report-cell"><td class="py-2 text-purple-400 font-bold">最高集成度节点</td><td class="font-mono text-white">${maxIntName}</td><td class="text-xs text-gray-500">核心位置</td><td>Integration: ${maxIntVal.toFixed(2)}</td></tr>
+                <tr class="report-cell"><td class="py-2 text-purple-400 font-bold">最高穿行度节点</td><td class="font-mono text-white">${maxChoiceName}</td><td class="text-xs text-gray-500">交通枢纽</td><td>Choice: ${maxChoiceVal}</td></tr>
             `;
         }
 
@@ -1404,6 +1588,13 @@
             
             const idx = Math.floor(Math.random() * newLayout.length);
             const target = newLayout[idx];
+            
+            // Fixed Logic in Generative Design
+            const realBlock = blocks.find(b => b.userData.id === target.id);
+            if (!realBlock || realBlock.userData.fixed) {
+                return setTimeout(runGenerativeIteration, 0); 
+            }
+
             target.pos.x += (Math.random()-0.5) * 20;
             target.pos.z += (Math.random()-0.5) * 20;
             
@@ -1443,7 +1634,7 @@
                 const best = bestSolutions[0];
                 best.layout.forEach(item => {
                     const block = blocks.find(b => b.userData.id === item.id);
-                    if(block) block.position.copy(item.pos);
+                    if(block && !block.userData.fixed) block.position.copy(item.pos);
                 });
                 updateSystem();
                 alert("已应用最佳生成布局");
@@ -1625,7 +1816,10 @@
             document.getElementById('prop-h').value = d.h;
             document.getElementById('prop-d').value = d.d;
             document.getElementById('prop-y').value = mesh.position.y;
+            document.getElementById('prop-fixed').checked = !!d.fixed;
             
+            fillSyntaxPanel(mesh); // Fill syntax stats
+
             let area = 0;
             if (d.points) {
                 let areaSum = 0;
@@ -1690,6 +1884,14 @@
             }
         }
 
+        function fillSyntaxPanel(mesh) {
+            const s = mesh.userData.syntax || { integration: 0, choice: 0, connectivity: 0, control: 0 };
+            document.getElementById('syn-int').innerText = s.integration.toFixed(2);
+            document.getElementById('syn-ch').innerText = s.choice.toFixed(0);
+            document.getElementById('syn-con').innerText = s.connectivity;
+            document.getElementById('syn-ctr').innerText = s.control.toFixed(2);
+        }
+
         // ... [Rest of the code remains the same] ...
         // (animate, setPhysicsMode, applyPhysics, updateBlockGeometry, etc.)
         
@@ -1702,6 +1904,8 @@
             if(physicsMode === 0 || isDragging) return;
 
             blocks.forEach(b1 => {
+                if (b1.userData.fixed) return; // Skip updating position if fixed
+                
                 let force = new THREE.Vector3(0,0,0);
                 if(b1.position.length() > 200) force.add(b1.position.clone().negate().multiplyScalar(0.01));
                 blocks.forEach(b2 => {
@@ -1725,8 +1929,8 @@
                        const target = 50 - (c.strength * 5);
                        if (dist > target) {
                            const pull = diff.normalize().multiplyScalar((dist - target) * 0.005 * c.strength);
-                           c.b1.position.add(pull);
-                           c.b2.position.sub(pull);
+                           if (!c.b1.userData.fixed) c.b1.position.add(pull);
+                           if (!c.b2.userData.fixed) c.b2.position.sub(pull);
                        }
                    } 
                 });
@@ -1761,9 +1965,10 @@
                             n1.local.z = THREE.MathUtils.clamp(n1.local.z + force.z, -limitZ, limitZ);
                             n2.local.x = THREE.MathUtils.clamp(n2.local.x - force.x, -n2.parent.userData.w/2, n2.parent.userData.w/2);
                             n2.local.z = THREE.MathUtils.clamp(n2.local.z - force.z, -n2.parent.userData.d/2, n2.parent.userData.d/2);
+                            
                             const parentDragFactor = 0.2; 
-                            n1.parent.position.add(force.multiplyScalar(parentDragFactor));
-                            n2.parent.position.sub(force.multiplyScalar(parentDragFactor));
+                            if (!n1.parent.userData.fixed) n1.parent.position.add(force.multiplyScalar(parentDragFactor));
+                            if (!n2.parent.userData.fixed) n2.parent.position.sub(force.multiplyScalar(parentDragFactor));
                         }
                     }
                 });
@@ -1779,16 +1984,44 @@
 
         window.toggleDaylightMode = () => {
             isDaylightMode = !isDaylightMode;
+            // Force disable syntax mode if enabled
+            if(syntaxMode !== 'none') { syntaxMode = 'none'; document.getElementById('btn-syntax').classList.remove('active'); }
+            
             document.getElementById('btn-daylight').classList.toggle('active');
             if(!isDaylightMode) {
-                blocks.forEach(b => {
-                    b.material.color.set(b.userData.originalColor);
-                    b.material.emissive.set(0x000000);
-                });
+                resetBlockColors();
             } else {
                 runDaylightAnalysis();
             }
         };
+
+        window.toggleSyntaxMode = () => {
+             // Cycle: None -> Integration -> Choice -> None
+             if (syntaxMode === 'none') {
+                 syntaxMode = 'integration';
+                 isDaylightMode = false; document.getElementById('btn-daylight').classList.remove('active');
+             } else if (syntaxMode === 'integration') {
+                 syntaxMode = 'choice';
+             } else {
+                 syntaxMode = 'none';
+             }
+
+             const btn = document.getElementById('btn-syntax');
+             btn.classList.toggle('active', syntaxMode !== 'none');
+             
+             // Tooltip update
+             btn.title = syntaxMode === 'none' ? '空间句法热力图' : (syntaxMode === 'integration' ? '当前: 集成度 (Integration)' : '当前: 穿行度 (Choice)');
+             
+             if (syntaxMode === 'none') resetBlockColors();
+             else runSyntaxVisuals();
+        };
+
+        function resetBlockColors() {
+            blocks.forEach(b => {
+                b.material.color.set(b.userData.originalColor);
+                b.material.emissive.set(0x000000);
+            });
+        }
 
         function runDaylightAnalysis() {
             blocks.forEach(b => {
@@ -1798,6 +2031,27 @@
                     const h = Math.min(b.position.y / 50, 1);
                     b.material.color.setHSL(0.1 + h*0.1, 0.8, 0.5);
                 }
+            });
+        }
+
+        function runSyntaxVisuals() {
+            // Find Min/Max for normalization
+            let vals = [];
+            blocks.forEach(b => {
+                vals.push(syntaxMode === 'integration' ? b.userData.syntax.integration : b.userData.syntax.choice);
+            });
+            const max = Math.max(...vals) || 1;
+            const min = Math.min(...vals) || 0;
+            const range = max - min;
+
+            blocks.forEach(b => {
+                const val = syntaxMode === 'integration' ? b.userData.syntax.integration : b.userData.syntax.choice;
+                // Heatmap: Blue (Low) -> Red (High)
+                const norm = range === 0 ? 0.5 : (val - min) / range;
+                // Hue: 0.66 (Blue) -> 0.0 (Red)
+                const hue = (1.0 - norm) * 0.66;
+                b.material.color.setHSL(hue, 1.0, 0.5);
+                b.material.emissive.set(0x000000);
             });
         }
 
@@ -1937,6 +2191,11 @@
             selectedBlocks[0].material.color.set(e.target.value);
             updateLabels();
         });
+
+        document.getElementById('prop-fixed').addEventListener('change', e => {
+            if(selectedBlocks.length !== 1) return;
+            selectedBlocks[0].userData.fixed = e.target.checked;
+        });
         
         function updateLabels() {
             const layer = document.getElementById('labels-layer');
@@ -1981,7 +2240,12 @@
         window.toggleSliceMode = () => { isSliceMode = !isSliceMode; updateSliceView(); };
         function updateSliceView() {
             blocks.forEach(m => {
-                if(!isSliceMode) { m.material.opacity = 0.9; return; }
+                if(!isSliceMode) { 
+                    // Reset opacity based on whether we are in syntax mode or normal mode
+                    // If syntax mode, we need full opacity to see color
+                    m.material.opacity = 0.9; 
+                    return; 
+                }
                 const b = m.position.y - m.userData.h/2;
                 const t = m.position.y + m.userData.h/2;
                 m.material.opacity = (sliceY >= b && sliceY <= t) ? 0.9 : 0.1;
@@ -2066,6 +2330,13 @@
             };
             if(blocks.some(b => b.userData.isLandlocked)) addDiag('部分房间采光不足 (黑房间)', 'warn');
             if(Object.values(l2Matrix).some(v => v > 4)) addDiag('检测到高优先级 L2 连接', 'info');
+            
+            // Syntax Diagnostics
+            const highChoice = blocks.find(b => b.userData.syntax.choice > 5 && (b.userData.name.includes('手术') || b.userData.name.includes('ICU')));
+            if(highChoice) addDiag(`${highChoice.userData.name} 穿行度过高，可能干扰洁净区`, 'warn');
+            
+            const lowInt = blocks.find(b => b.userData.syntax.integration < 1.0 && (b.userData.name.includes('门诊') || b.userData.name.includes('急诊')));
+            if(lowInt) addDiag(`${lowInt.userData.name} 集成度低，患者到达不便`, 'warn');
         }
 
         function animate() {
