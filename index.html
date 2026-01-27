@@ -462,6 +462,7 @@
                 <div class="v-btn-icon" id="btn-daylight" onclick="toggleDaylightMode()" title="采光热力图"><i class="fas fa-sun"></i></div>
                 <div class="v-btn-icon" id="btn-syntax" onclick="toggleSyntaxMode()" title="空间句法热力图 (Integration/Choice)"><i class="fas fa-network-wired"></i></div>
                 <div class="v-btn-icon" id="btn-footprint" onclick="toggleFootprint()" title="显示建筑基底"><i class="far fa-map"></i></div>
+                <div class="v-btn-icon" id="btn-edit-fp" onclick="toggleFootprintEdit()" title="编辑基底" style="display:none;"><i class="fas fa-pen-nib"></i></div>
                 <div class="v-btn-icon active" id="btn-labels" onclick="toggleLabels()" title="距离标注"><i class="fas fa-ruler-combined"></i></div>
                 
                 <div style="display:flex; align-items:center; background:var(--border-faint); border-radius:14px; padding:2px; border:1px solid var(--border-color);">
@@ -769,7 +770,10 @@
         
         // Footprint State
         let isFootprintVisible = false;
+        let isFootprintEditMode = false;
         let footprintMesh = null;
+        let footprintPoints = [];
+        let footprintHandles = [];
         
         let showDistanceLabels = true; 
         let physicsMode = 0; 
@@ -905,24 +909,31 @@
 
         // --- Footprint Logic (NEW) ---
         function initFootprint() {
-            // A hypothetical U-shaped hospital site boundary
-            const sitePoints = [
+            // Global points
+            footprintPoints = [
                 {x: -120, z: -100},
                 {x: 120, z: -100},
                 {x: 120, z: 100},
                 {x: 60, z: 100},
-                {x: 60, z: 20}, // Inner courtyard start
-                {x: -60, z: 20}, // Inner courtyard end
+                {x: 60, z: 20},
+                {x: -60, z: 20},
                 {x: -60, z: 100},
                 {x: -120, z: 100}
             ];
+            updateFootprintGeometry();
+        }
+
+        function updateFootprintGeometry() {
+            if (footprintMesh) {
+                scene.remove(footprintMesh);
+                footprintMesh.geometry.dispose();
+            }
 
             const pts = [];
-            sitePoints.forEach(p => pts.push(new THREE.Vector3(p.x, 0.5, p.z))); // Y=0.5 to sit just above grid
-            pts.push(new THREE.Vector3(sitePoints[0].x, 0.5, sitePoints[0].z)); // Close loop
+            footprintPoints.forEach(p => pts.push(new THREE.Vector3(p.x, 0.5, p.z))); 
+            pts.push(new THREE.Vector3(footprintPoints[0].x, 0.5, footprintPoints[0].z)); // Close loop
 
             const geometry = new THREE.BufferGeometry().setFromPoints(pts);
-            // Yellow dashed line for visibility on both dark/light themes
             const material = new THREE.LineDashedMaterial({
                 color: 0xffd700,
                 dashSize: 3,
@@ -932,8 +943,8 @@
             });
 
             footprintMesh = new THREE.Line(geometry, material);
-            footprintMesh.computeLineDistances(); // Required for dashed line
-            footprintMesh.visible = false; // Hidden by default
+            footprintMesh.computeLineDistances(); 
+            footprintMesh.visible = isFootprintVisible; 
             scene.add(footprintMesh);
         }
 
@@ -942,7 +953,45 @@
             isFootprintVisible = !isFootprintVisible;
             footprintMesh.visible = isFootprintVisible;
             document.getElementById('btn-footprint').classList.toggle('active', isFootprintVisible);
+            
+            // Toggle edit button visibility
+            const editBtn = document.getElementById('btn-edit-fp');
+            if (isFootprintVisible) {
+                editBtn.style.display = 'flex';
+            } else {
+                editBtn.style.display = 'none';
+                if(isFootprintEditMode) window.toggleFootprintEdit(); // Turn off edit mode if hiding footprint
+            }
         };
+
+        window.toggleFootprintEdit = () => {
+            isFootprintEditMode = !isFootprintEditMode;
+            document.getElementById('btn-edit-fp').classList.toggle('active', isFootprintEditMode);
+            
+            if (isFootprintEditMode) {
+                createFootprintHandles();
+            } else {
+                clearFootprintHandles();
+            }
+        };
+
+        function createFootprintHandles() {
+            clearFootprintHandles();
+            footprintPoints.forEach((pt, i) => {
+                const geo = new THREE.SphereGeometry(1.5, 16, 16);
+                const mat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
+                const handle = new THREE.Mesh(geo, mat);
+                handle.position.set(pt.x, 0.5, pt.z);
+                handle.userData = { isFootprintHandle: true, index: i };
+                scene.add(handle);
+                footprintHandles.push(handle);
+            });
+        }
+
+        function clearFootprintHandles() {
+            footprintHandles.forEach(h => scene.remove(h));
+            footprintHandles = [];
+        }
 
         // --- Extrusion Logic ---
         function generateExtrudedGeometry(points, height) {
@@ -1350,6 +1399,19 @@
             
             raycaster.setFromCamera(mouse, camera);
             
+            // 0. Check Footprint Handles (Priority when mode active)
+            if (isFootprintEditMode && footprintHandles.length > 0) {
+                const intersectsF = raycaster.intersectObjects(footprintHandles);
+                if (intersectsF.length > 0) {
+                    controls.enabled = false;
+                    isDragging = true;
+                    draggedObject = intersectsF[0].object;
+                    const ip = intersectsF[0].point;
+                    dragPlane.constant = -ip.y;
+                    return;
+                }
+            }
+
             // 1. Check for Shape Handles first (Custom Drag for Vertex Editing)
             if(isShapeEditMode && shapeHandles.length > 0) {
                 const intersectsH = raycaster.intersectObjects(shapeHandles);
@@ -1420,6 +1482,31 @@
         }
 
         function onMouseMove(e) {
+            
+            // Handle Footprint Handle Dragging
+            if (isDragging && draggedObject && draggedObject.userData.isFootprintHandle) {
+                const rect = container.getBoundingClientRect();
+                mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                
+                raycaster.setFromCamera(mouse, camera);
+                const intersectPoint = new THREE.Vector3();
+                raycaster.ray.intersectPlane(dragPlane, intersectPoint);
+                
+                if (intersectPoint) {
+                    const handle = draggedObject;
+                    handle.position.set(intersectPoint.x, 0.5, intersectPoint.z);
+                    
+                    // Update point data
+                    const idx = handle.userData.index;
+                    footprintPoints[idx].x = intersectPoint.x;
+                    footprintPoints[idx].z = intersectPoint.z;
+                    
+                    updateFootprintGeometry();
+                    return;
+                }
+            }
+
             // Only handle custom dragging for Shape Handles (Vertices)
             if (isDragging && draggedObject && draggedObject.userData.isHandle) {
                 const rect = container.getBoundingClientRect();
