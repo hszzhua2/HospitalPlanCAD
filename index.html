@@ -977,6 +977,7 @@
 
         function createFootprintHandles() {
             clearFootprintHandles();
+            // Real handles
             footprintPoints.forEach((pt, i) => {
                 const geo = new THREE.SphereGeometry(1.5, 16, 16);
                 const mat = new THREE.MeshBasicMaterial({ color: 0xffd700 });
@@ -986,6 +987,23 @@
                 scene.add(handle);
                 footprintHandles.push(handle);
             });
+
+            // Ghost handles (Midpoints)
+            for (let i = 0; i < footprintPoints.length; i++) {
+                const nextI = (i + 1) % footprintPoints.length;
+                const pt = footprintPoints[i];
+                const nextPt = footprintPoints[nextI];
+                const midX = (pt.x + nextPt.x) / 2;
+                const midZ = (pt.z + nextPt.z) / 2;
+
+                const geo = new THREE.SphereGeometry(1.0, 16, 16); // Slightly smaller
+                const mat = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.6 });
+                const ghost = new THREE.Mesh(geo, mat);
+                ghost.position.set(midX, 0.5, midZ);
+                ghost.userData = { isFootprintHandle: true, isGhost: true, index: i }; // Index indicates insertion point (after i)
+                scene.add(ghost);
+                footprintHandles.push(ghost);
+            }
         }
 
         function clearFootprintHandles() {
@@ -1403,9 +1421,32 @@
             if (isFootprintEditMode && footprintHandles.length > 0) {
                 const intersectsF = raycaster.intersectObjects(footprintHandles);
                 if (intersectsF.length > 0) {
+                    const obj = intersectsF[0].object;
+                    
+                    if (obj.userData.isGhost) {
+                        const idx = obj.userData.index;
+                        const pt1 = footprintPoints[idx];
+                        const pt2 = footprintPoints[(idx + 1) % footprintPoints.length];
+                        const newPt = { x: (pt1.x + pt2.x) / 2, z: (pt1.z + pt2.z) / 2 };
+                        
+                        footprintPoints.splice(idx + 1, 0, newPt);
+                        updateFootprintGeometry();
+                        createFootprintHandles(); // Re-create handles
+                        
+                        // Find the new real handle to start dragging
+                        const newHandle = footprintHandles.find(h => !h.userData.isGhost && h.userData.index === idx + 1);
+                        
+                        controls.enabled = false;
+                        isDragging = true;
+                        draggedObject = newHandle;
+                        const ip = intersectsF[0].point;
+                        dragPlane.constant = -ip.y;
+                        return;
+                    }
+
                     controls.enabled = false;
                     isDragging = true;
-                    draggedObject = intersectsF[0].object;
+                    draggedObject = obj;
                     const ip = intersectsF[0].point;
                     dragPlane.constant = -ip.y;
                     return;
