@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>医院空间效能规划系统 V4.0 (Space Syntax Integrated)</title>
+    <title>医院空间效能规划系统 V4.2 (Liquid Glass UI)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -60,6 +60,74 @@
             --chart-text: #64748b;
             --ai-msg-user: #dbeafe;
             --ai-msg-bot: #f1f5f9;
+        }
+
+        /* --- Liquid Glass Mode (Apple Style) --- */
+        [data-theme="liquid"] {
+            /* Vibrant Mesh Gradient Background Context */
+            --bg-app: #242424; 
+            
+            /* Glass Material */
+            --bg-panel: rgba(255, 255, 255, 0.1); /* Frosted Glass */
+            --bg-panel-solid: rgba(30, 30, 30, 0.6);
+            
+            /* Typography */
+            --text-main: #ffffff;
+            --text-muted: rgba(255, 255, 255, 0.65);
+            
+            /* Borders: Subtle white glow */
+            --border-color: rgba(255, 255, 255, 0.2);
+            --border-faint: rgba(255, 255, 255, 0.1);
+            
+            /* Inputs */
+            --input-bg: rgba(0, 0, 0, 0.2);
+            --input-border: rgba(255, 255, 255, 0.15);
+            
+            /* Interaction */
+            --btn-ghost-hover: rgba(255, 255, 255, 0.2);
+            
+            /* Shadows: Deep and soft */
+            --shadow-color: rgba(0, 0, 0, 0.5);
+            
+            /* Specific Elements */
+            --kpi-bg: rgba(255, 255, 255, 0.08);
+            --matrix-bg: rgba(255, 255, 255, 0.05);
+            --matrix-border: rgba(255, 255, 255, 0.1);
+            
+            /* Grid */
+            --grid-line-1: rgba(255, 255, 255, 0.2);
+            --grid-line-2: rgba(255, 255, 255, 0.05);
+            
+            /* Chat */
+            --ai-msg-user: rgba(10, 132, 255, 0.4);
+            --ai-msg-bot: rgba(255, 255, 255, 0.15);
+        }
+
+        /* Liquid Specific Overrides for Blur & Depth */
+        [data-theme="liquid"] .panel,
+        [data-theme="liquid"] #main-nav,
+        [data-theme="liquid"] .kpi-card,
+        [data-theme="liquid"] .sidebar-header,
+        [data-theme="liquid"] #view-controls,
+        [data-theme="liquid"] #slice-panel,
+        [data-theme="liquid"] .btn-zoom {
+            backdrop-filter: blur(25px) saturate(180%);
+            -webkit-backdrop-filter: blur(25px) saturate(180%);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.05));
+        }
+        
+        [data-theme="liquid"] #canvas-container {
+            /* Deep Space / Abstract Gradient for Glass to pop */
+            background: radial-gradient(circle at 10% 20%, #201838 0%, #0f172a 90%);
+        }
+        
+        [data-theme="liquid"] .nav-tab.active {
+            background: rgba(255, 255, 255, 0.3);
+            color: white;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            border: 1px solid rgba(255,255,255,0.2);
         }
 
         body { margin: 0; overflow: hidden; font-family: 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: var(--bg-app); color: var(--text-main); transition: background-color 0.3s, color 0.3s; }
@@ -363,7 +431,7 @@
 
     <div id="app-container">
         <nav id="main-nav">
-            <div class="nav-brand"><i class="fas fa-hospital-symbol"></i> IPPR-MC-SPACE V4.0 (Syntax Integrated)</div>
+            <div class="nav-brand"><i class="fas fa-hospital-symbol"></i> MC-SPACE V4.2 (Liquid Glass UI)</div>
             <div class="nav-tabs">
                 <div class="nav-tab active" onclick="switchTab('3d')"><i class="fas fa-cube"></i> 3D 规划</div>
                 <div class="nav-tab" onclick="switchTab('report')"><i class="fas fa-chart-pie"></i> 效能报告</div>
@@ -393,6 +461,7 @@
                 <div style="width:1px; height:20px; background:var(--border-color); margin:0 4px;"></div>
                 <div class="v-btn-icon" id="btn-daylight" onclick="toggleDaylightMode()" title="采光热力图"><i class="fas fa-sun"></i></div>
                 <div class="v-btn-icon" id="btn-syntax" onclick="toggleSyntaxMode()" title="空间句法热力图 (Integration/Choice)"><i class="fas fa-network-wired"></i></div>
+                <div class="v-btn-icon" id="btn-footprint" onclick="toggleFootprint()" title="显示建筑基底"><i class="far fa-map"></i></div>
                 <div class="v-btn-icon active" id="btn-labels" onclick="toggleLabels()" title="距离标注"><i class="fas fa-ruler-combined"></i></div>
                 
                 <div style="display:flex; align-items:center; background:var(--border-faint); border-radius:14px; padding:2px; border:1px solid var(--border-color);">
@@ -698,6 +767,10 @@
         // Space Syntax State
         let syntaxMode = 'none'; // 'none', 'integration', 'choice'
         
+        // Footprint State
+        let isFootprintVisible = false;
+        let footprintMesh = null;
+        
         let showDistanceLabels = true; 
         let physicsMode = 0; 
         let matrixLevel = 'l1'; 
@@ -770,47 +843,105 @@
         let grid = new THREE.GridHelper(400, 40, 0x334155, 0x1e293b);
         scene.add(grid);
 
-        // --- Core Functions ---
-
-        function init() {
-            setRelation('er', 'img', 5);
-            setRelation('er', 'surg', 4);
-            setRelation('op', 'img', 3);
-            setRelation('surg', 'icu', 5);
-            setRelation('surg', 'img', 3);
-
-            initialDepts.forEach(createBlock);
-            setL2Relation('er_resus', 'img_ct', 5);
-
-            updateSystem();
-            renderMatrix();
-            window.addEventListener('resize', onResize);
-            onResize();
-            resetView();
-            animate();
-            saveState(); 
-        }
-
         window.toggleTheme = () => {
-            currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            // Cycle: Dark -> Light -> Liquid -> Dark
+            if (currentTheme === 'dark') currentTheme = 'light';
+            else if (currentTheme === 'light') currentTheme = 'liquid';
+            else currentTheme = 'dark';
+
             document.documentElement.setAttribute('data-theme', currentTheme);
             const btn = document.getElementById('theme-icon');
             
+            // Default Grid Colors
+            let gridColor1 = 0x334155;
+            let gridColor2 = 0x1e293b;
+            let bgColor = 0x0f172a;
+
             if(currentTheme === 'light') {
                 btn.className = 'fas fa-sun';
-                scene.background = new THREE.Color(0xf1f5f9);
-                scene.remove(grid);
-                grid = new THREE.GridHelper(400, 40, 0xcbd5e1, 0xe2e8f0);
-                scene.add(grid);
+                bgColor = 0xf1f5f9;
+                gridColor1 = 0xcbd5e1;
+                gridColor2 = 0xe2e8f0;
+            } else if (currentTheme === 'liquid') {
+                btn.className = 'fas fa-tint'; // Drop icon for Liquid
+                // In Liquid mode, CSS handles the background gradient. 
+                // We make THREE scene background transparent to show CSS gradient.
+                // However, OrbitControls and post-processing often need a scene background.
+                // A better approach for "Glass" 3D scene is a darkish ambient color or keep transparent if CSS is visible.
+                // Let's use a very dark blue/black for the 3D scene to blend with the CSS 'Deep Space' gradient.
+                bgColor = null; // Transparent, let CSS show through
+                gridColor1 = 0xaaaaaa;
+                gridColor2 = 0x555555;
             } else {
+                // Dark
                 btn.className = 'fas fa-moon';
-                scene.background = new THREE.Color(0x0f172a);
-                scene.remove(grid);
-                grid = new THREE.GridHelper(400, 40, 0x334155, 0x1e293b);
-                scene.add(grid);
+                bgColor = 0x0f172a;
+                gridColor1 = 0x334155;
+                gridColor2 = 0x1e293b;
             }
+
+            if (bgColor === null) {
+                scene.background = null; // Transparent
+            } else {
+                scene.background = new THREE.Color(bgColor);
+            }
+
+            scene.remove(grid);
+            // Re-add grid with correct colors
+            // Note: GridHelper doesn't support opacity updates easily, so we recreate
+            // For Liquid mode, we want a faint grid.
+            if (currentTheme === 'liquid') {
+                 grid = new THREE.GridHelper(400, 40, gridColor1, gridColor2);
+                 grid.material.opacity = 0.2;
+                 grid.material.transparent = true;
+            } else {
+                 grid = new THREE.GridHelper(400, 40, gridColor1, gridColor2);
+            }
+            scene.add(grid);
+
             updateConnections();
             if(document.getElementById('view-report').classList.contains('active')) generateReport();
+        };
+
+        // --- Footprint Logic (NEW) ---
+        function initFootprint() {
+            // A hypothetical U-shaped hospital site boundary
+            const sitePoints = [
+                {x: -120, z: -100},
+                {x: 120, z: -100},
+                {x: 120, z: 100},
+                {x: 60, z: 100},
+                {x: 60, z: 20}, // Inner courtyard start
+                {x: -60, z: 20}, // Inner courtyard end
+                {x: -60, z: 100},
+                {x: -120, z: 100}
+            ];
+
+            const pts = [];
+            sitePoints.forEach(p => pts.push(new THREE.Vector3(p.x, 0.5, p.z))); // Y=0.5 to sit just above grid
+            pts.push(new THREE.Vector3(sitePoints[0].x, 0.5, sitePoints[0].z)); // Close loop
+
+            const geometry = new THREE.BufferGeometry().setFromPoints(pts);
+            // Yellow dashed line for visibility on both dark/light themes
+            const material = new THREE.LineDashedMaterial({
+                color: 0xffd700,
+                dashSize: 3,
+                gapSize: 2,
+                opacity: 0.8,
+                transparent: true
+            });
+
+            footprintMesh = new THREE.Line(geometry, material);
+            footprintMesh.computeLineDistances(); // Required for dashed line
+            footprintMesh.visible = false; // Hidden by default
+            scene.add(footprintMesh);
+        }
+
+        window.toggleFootprint = () => {
+            if(!footprintMesh) return;
+            isFootprintVisible = !isFootprintVisible;
+            footprintMesh.visible = isFootprintVisible;
+            document.getElementById('btn-footprint').classList.toggle('active', isFootprintVisible);
         };
 
         // --- Extrusion Logic ---
@@ -893,6 +1024,58 @@
         function getL2Relation(id1, id2) {
             const k = id1 < id2 ? `${id1}-${id2}` : `${id2}-${id1}`;
             return l2Matrix[k] || 0;
+        }
+
+        // MOVED HERE: updateLabels definition to avoid ReferenceError in hoisting edge cases
+        function updateLabels() {
+            const layer = document.getElementById('labels-layer');
+            const old = layer.querySelectorAll('.dept-label');
+            old.forEach(o => o.remove());
+            blocks.forEach(b => {
+                const el = document.createElement('div');
+                el.className = 'dept-label';
+                // Estimate area for label
+                let area = b.userData.w * b.userData.d; 
+                if (b.userData.points) {
+                     // Recalc area for display
+                     let s = 0;
+                     const p = b.userData.points;
+                     for(let i=0;i<p.length;i++) { s += p[i].x*p[(i+1)%p.length].y - p[i].y*p[(i+1)%p.length].x; }
+                     area = Math.abs(s)/2;
+                }
+                
+                el.innerHTML = `<div class="dept-name" style="border-left:3px solid ${b.userData.color}">${b.userData.name}<span class="dept-area">${area.toFixed(0)}m²</span></div>`;
+                if(b.userData.isLandlocked) el.innerHTML += `<div class="dept-issue">采光差</div>`;
+                b.userData.labelEl = el;
+                layer.appendChild(el);
+            });
+            document.getElementById('dept-list').innerHTML = blocks.map(b => 
+                `<div class="flex justify-between items-center text-xs p-2 rounded cursor-pointer hover:bg-opacity-10 bg-white bg-opacity-5" onclick="window.focusBlock('${b.userData.id}')">
+                    <span class="flex items-center gap-2"><div style="width:8px;height:8px;border-radius:50%;background:${b.userData.color}"></div>${b.userData.name}</span>
+                    <span class="opacity-50">${b.userData.subNodes.length} pts</span>
+                 </div>`
+            ).join('');
+        }
+
+        // MOVED HERE: updateSliceView related functions to avoid ReferenceError
+        window.updateSliceHeight = (v) => { 
+            sliceY = parseFloat(v); 
+            document.getElementById('slice-display').textContent = isSliceMode ? `Layer ${Math.floor(sliceY/4)+1}` : "ALL"; 
+            updateSliceView(); 
+        };
+        window.toggleSliceMode = () => { isSliceMode = !isSliceMode; updateSliceView(); };
+        function updateSliceView() {
+            blocks.forEach(m => {
+                if(!isSliceMode) { 
+                    // Reset opacity based on whether we are in syntax mode or normal mode
+                    // If syntax mode, we need full opacity to see color
+                    m.material.opacity = 0.9; 
+                    return; 
+                }
+                const b = m.position.y - m.userData.h/2;
+                const t = m.position.y + m.userData.h/2;
+                m.material.opacity = (sliceY >= b && sliceY <= t) ? 0.9 : 0.1;
+            });
         }
 
         function updateSystem() {
@@ -2197,61 +2380,73 @@
             selectedBlocks[0].userData.fixed = e.target.checked;
         });
         
-        function updateLabels() {
-            const layer = document.getElementById('labels-layer');
-            const old = layer.querySelectorAll('.dept-label');
-            old.forEach(o => o.remove());
-            blocks.forEach(b => {
-                const el = document.createElement('div');
-                el.className = 'dept-label';
-                // Estimate area for label
-                let area = b.userData.w * b.userData.d; 
-                if (b.userData.points) {
-                     // Recalc area for display
-                     let s = 0;
-                     const p = b.userData.points;
-                     for(let i=0;i<p.length;i++) { s += p[i].x*p[(i+1)%p.length].y - p[i].y*p[(i+1)%p.length].x; }
-                     area = Math.abs(s)/2;
-                }
+        function updateDiagnostics() {
+            const list = document.getElementById('diagnostics-list');
+            list.innerHTML = '';
+            const addDiag = (msg, level='info') => {
+                const div = document.createElement('div');
+                div.className = `diag-item ${level}`;
+                div.innerHTML = `<i class="fas fa-${level==='warn'?'exclamation-circle':'info-circle'}"></i> <span>${msg}</span>`;
+                list.appendChild(div);
+            };
+            if(blocks.some(b => b.userData.isLandlocked)) addDiag('部分房间采光不足 (黑房间)', 'warn');
+            if(Object.values(l2Matrix).some(v => v > 4)) addDiag('检测到高优先级 L2 连接', 'info');
+            
+            // Syntax Diagnostics
+            const highChoice = blocks.find(b => b.userData.syntax.choice > 5 && (b.userData.name.includes('手术') || b.userData.name.includes('ICU')));
+            if(highChoice) addDiag(`${highChoice.userData.name} 穿行度过高，可能干扰洁净区`, 'warn');
+            
+            const lowInt = blocks.find(b => b.userData.syntax.integration < 1.0 && (b.userData.name.includes('门诊') || b.userData.name.includes('急诊')));
+            if(lowInt) addDiag(`${lowInt.userData.name} 集成度低，患者到达不便`, 'warn');
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            applyPhysics();
+            
+            if(blocks.length > 0) {
+                const rect = container.getBoundingClientRect();
                 
-                el.innerHTML = `<div class="dept-name" style="border-left:3px solid ${b.userData.color}">${b.userData.name}<span class="dept-area">${area.toFixed(0)}m²</span></div>`;
-                if(b.userData.isLandlocked) el.innerHTML += `<div class="dept-issue">采光差</div>`;
-                b.userData.labelEl = el;
-                layer.appendChild(el);
-            });
-            document.getElementById('dept-list').innerHTML = blocks.map(b => 
-                `<div class="flex justify-between items-center text-xs p-2 rounded cursor-pointer hover:bg-opacity-10 bg-white bg-opacity-5" onclick="window.focusBlock('${b.userData.id}')">
-                    <span class="flex items-center gap-2"><div style="width:8px;height:8px;border-radius:50%;background:${b.userData.color}"></div>${b.userData.name}</span>
-                    <span class="opacity-50">${b.userData.subNodes.length} pts</span>
-                 </div>`
-            ).join('');
+                blocks.forEach(b => {
+                    if (b.userData.labelEl) {
+                        const tempV = b.position.clone();
+                        tempV.y += b.userData.h / 2 + 2; 
+                        tempV.project(camera);
+                        
+                        if(tempV.z > 1 || Math.abs(tempV.x)>1 || Math.abs(tempV.y)>1) {
+                            b.userData.labelEl.style.display = 'none';
+                        } else {
+                            b.userData.labelEl.style.display = 'flex';
+                            const x = (tempV.x * .5 + .5) * rect.width;
+                            const y = (-tempV.y * .5 + .5) * rect.height;
+                            b.userData.labelEl.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
+                        }
+                    }
+                });
+
+                connections.forEach(c => {
+                    if (c.label) {
+                        const tempV = c.mid.clone().project(camera);
+                        if(tempV.z > 1 || Math.abs(tempV.x)>1 || Math.abs(tempV.y)>1) {
+                            c.label.style.display = 'none';
+                        } else {
+                            c.label.style.display = showDistanceLabels ? 'block' : 'none';
+                            const x = (tempV.x * .5 + .5) * rect.width;
+                            const y = (-tempV.y * .5 + .5) * rect.height;
+                            c.label.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
+                        }
+                    }
+                });
+            }
+
+            renderer.render(scene, camera);
         }
 
-        window.focusBlock = (id) => {
-            const b = blocks.find(x => x.userData.id === id);
-            if(b) handleSelection([b]);
-        };
+        window.openAIModal = () => document.getElementById('ai-modal').style.display = 'flex';
+        window.closeAIModal = () => document.getElementById('ai-modal').style.display = 'none';
 
-        window.updateSliceHeight = (v) => { 
-            sliceY = parseFloat(v); 
-            document.getElementById('slice-display').textContent = isSliceMode ? `Layer ${Math.floor(sliceY/4)+1}` : "ALL"; 
-            updateSliceView(); 
-        };
-        window.toggleSliceMode = () => { isSliceMode = !isSliceMode; updateSliceView(); };
-        function updateSliceView() {
-            blocks.forEach(m => {
-                if(!isSliceMode) { 
-                    // Reset opacity based on whether we are in syntax mode or normal mode
-                    // If syntax mode, we need full opacity to see color
-                    m.material.opacity = 0.9; 
-                    return; 
-                }
-                const b = m.position.y - m.userData.h/2;
-                const t = m.position.y + m.userData.h/2;
-                m.material.opacity = (sliceY >= b && sliceY <= t) ? 0.9 : 0.1;
-            });
-        }
-        
+        // --- Core Functions: View & Helpers ---
         window.setView = (mode) => {
             const size = 300;
             const end = new THREE.Vector3();
@@ -2319,71 +2514,28 @@
              renderMatrix();
              handleSelection([b]);
         };
-        function updateDiagnostics() {
-            const list = document.getElementById('diagnostics-list');
-            list.innerHTML = '';
-            const addDiag = (msg, level='info') => {
-                const div = document.createElement('div');
-                div.className = `diag-item ${level}`;
-                div.innerHTML = `<i class="fas fa-${level==='warn'?'exclamation-circle':'info-circle'}"></i> <span>${msg}</span>`;
-                list.appendChild(div);
-            };
-            if(blocks.some(b => b.userData.isLandlocked)) addDiag('部分房间采光不足 (黑房间)', 'warn');
-            if(Object.values(l2Matrix).some(v => v > 4)) addDiag('检测到高优先级 L2 连接', 'info');
+
+        // --- Init Function (Moved to End) ---
+        function init() {
+            setRelation('er', 'img', 5);
+            setRelation('er', 'surg', 4);
+            setRelation('op', 'img', 3);
+            setRelation('surg', 'icu', 5);
+            setRelation('surg', 'img', 3);
+
+            initialDepts.forEach(createBlock);
+            setL2Relation('er_resus', 'img_ct', 5);
             
-            // Syntax Diagnostics
-            const highChoice = blocks.find(b => b.userData.syntax.choice > 5 && (b.userData.name.includes('手术') || b.userData.name.includes('ICU')));
-            if(highChoice) addDiag(`${highChoice.userData.name} 穿行度过高，可能干扰洁净区`, 'warn');
-            
-            const lowInt = blocks.find(b => b.userData.syntax.integration < 1.0 && (b.userData.name.includes('门诊') || b.userData.name.includes('急诊')));
-            if(lowInt) addDiag(`${lowInt.userData.name} 集成度低，患者到达不便`, 'warn');
+            initFootprint(); 
+
+            updateSystem();
+            renderMatrix();
+            window.addEventListener('resize', onResize);
+            onResize();
+            resetView();
+            animate();
+            saveState(); 
         }
-
-        function animate() {
-            requestAnimationFrame(animate);
-            controls.update();
-            applyPhysics();
-            
-            if(blocks.length > 0) {
-                const rect = container.getBoundingClientRect();
-                
-                blocks.forEach(b => {
-                    if (b.userData.labelEl) {
-                        const tempV = b.position.clone();
-                        tempV.y += b.userData.h / 2 + 2; 
-                        tempV.project(camera);
-                        
-                        if(tempV.z > 1 || Math.abs(tempV.x)>1 || Math.abs(tempV.y)>1) {
-                            b.userData.labelEl.style.display = 'none';
-                        } else {
-                            b.userData.labelEl.style.display = 'flex';
-                            const x = (tempV.x * .5 + .5) * rect.width;
-                            const y = (-tempV.y * .5 + .5) * rect.height;
-                            b.userData.labelEl.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
-                        }
-                    }
-                });
-
-                connections.forEach(c => {
-                    if (c.label) {
-                        const tempV = c.mid.clone().project(camera);
-                        if(tempV.z > 1 || Math.abs(tempV.x)>1 || Math.abs(tempV.y)>1) {
-                            c.label.style.display = 'none';
-                        } else {
-                            c.label.style.display = showDistanceLabels ? 'block' : 'none';
-                            const x = (tempV.x * .5 + .5) * rect.width;
-                            const y = (-tempV.y * .5 + .5) * rect.height;
-                            c.label.style.transform = `translate(-50%, -50%) translate(${x}px, ${y}px)`;
-                        }
-                    }
-                });
-            }
-
-            renderer.render(scene, camera);
-        }
-
-        window.openAIModal = () => document.getElementById('ai-modal').style.display = 'flex';
-        window.closeAIModal = () => document.getElementById('ai-modal').style.display = 'none';
 
         init();
     </script>
